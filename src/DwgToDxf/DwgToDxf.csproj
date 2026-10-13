@@ -10,7 +10,7 @@
     <LangVersion>latest</LangVersion>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <Version>1.0.0</Version>
-    <Product>DWG to DXF batch converter for AutoCAD 2023</Product>
+    <Product>AutocadAddin: DWG2DXF and frame printing for AutoCAD 2023</Product>
   </PropertyGroup>
 
   <ItemGroup>
