@@ -20,7 +20,10 @@ namespace DwgToDxf
 
         public bool IncludeSubfolders { get; set; }
 
-        public DwgVersion Version { get; set; } = DwgVersion.AC1027; // DXF 2013
+        public DwgVersion Version { get; set; } = DwgVersion.AC1032; // DXF 2018
+
+        /// <summary>Audit, bind xref, phá block, xóa rác, purge trước khi xuất.</summary>
+        public bool Clean { get; set; } = true;
 
         /// <summary>Số chữ số thập phân khi ghi DXF (0..16).</summary>
         public int Precision { get; set; } = 16;
@@ -62,6 +65,7 @@ namespace DwgToDxf
             log.AppendLine("Nguon: " + options.SourceFolder + (options.IncludeSubfolders ? " (gom thu muc con)" : ""));
             log.AppendLine("Dich : " + (string.IsNullOrWhiteSpace(options.OutputFolder) ? "(cung thu muc voi file goc)" : options.OutputFolder));
             log.AppendLine("Phien ban DXF: " + VersionName(options.Version));
+            log.AppendLine("Lam sach truoc: " + (options.Clean ? "co" : "khong"));
             log.AppendLine("So file: " + files.Count);
             log.AppendLine();
 
@@ -88,9 +92,12 @@ namespace DwgToDxf
                     var dst = GetOutputPath(src, options);
                     try
                     {
-                        ConvertOne(src, dst, options.Version, options.Precision);
+                        var steps = new List<string>();
+                        ConvertOne(src, dst, options.Version, options.Precision, options.Clean, steps);
                         result.Succeeded++;
                         log.AppendLine("OK    " + src + " -> " + dst);
+                        foreach (var step in steps)
+                            log.AppendLine("        " + step);
                     }
                     catch (System.Exception ex)
                     {
@@ -114,7 +121,7 @@ namespace DwgToDxf
             return result;
         }
 
-        public static void ConvertOne(string dwgPath, string dxfPath, DwgVersion version, int precision)
+        public static void ConvertOne(string dwgPath, string dxfPath, DwgVersion version, int precision, bool clean, IList<string> steps)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(dxfPath));
 
@@ -125,8 +132,10 @@ namespace DwgToDxf
                 db.CloseInput(true);
                 try
                 {
-                    // Một số thao tác ghi file dựa vào WorkingDatabase; đổi tạm rồi trả lại.
+                    // Bind, explode, purge và ghi file đều dựa vào WorkingDatabase; đổi tạm rồi trả lại.
                     HostApplicationServices.WorkingDatabase = db;
+                    if (clean)
+                        DrawingCleaner.Clean(db, steps);
                     db.DxfOut(dxfPath, precision, version);
                 }
                 finally
@@ -175,13 +184,13 @@ namespace DwgToDxf
         {
             switch ((keyword ?? string.Empty).ToUpperInvariant().TrimStart('V'))
             {
-                case "2018": return DwgVersion.AC1032;
+                case "2013": return DwgVersion.AC1027;
                 case "2010": return DwgVersion.AC1024;
                 case "2007": return DwgVersion.AC1021;
                 case "2004": return DwgVersion.AC1800;
                 case "2000": return DwgVersion.AC1015;
                 case "R12": return DwgVersion.AC1009;
-                default: return DwgVersion.AC1027;
+                default: return DwgVersion.AC1032;
             }
         }
     }

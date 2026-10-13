@@ -22,7 +22,7 @@ namespace DwgToDxf
             var source = PickFolder("Chọn thư mục chứa các file DWG cần chuyển");
             if (source == null) return;
 
-            if (!AskOptions(ed, out var includeSub, out var useOtherFolder, out var version)) return;
+            if (!AskOptions(ed, out var includeSub, out var useOtherFolder, out var version, out var clean)) return;
 
             string output = null;
             if (useOtherFolder)
@@ -37,6 +37,7 @@ namespace DwgToDxf
                 OutputFolder = output,
                 IncludeSubfolders = includeSub,
                 Version = version,
+                Clean = clean,
             });
         }
 
@@ -57,7 +58,7 @@ namespace DwgToDxf
                 return;
             }
 
-            if (!AskOptions(ed, out var includeSub, out var useOtherFolder, out var version)) return;
+            if (!AskOptions(ed, out var includeSub, out var useOtherFolder, out var version, out var clean)) return;
 
             string output = null;
             if (useOtherFolder)
@@ -73,14 +74,16 @@ namespace DwgToDxf
                 OutputFolder = output,
                 IncludeSubfolders = includeSub,
                 Version = version,
+                Clean = clean,
             });
         }
 
-        private static bool AskOptions(Editor ed, out bool includeSub, out bool useOtherFolder, out Autodesk.AutoCAD.DatabaseServices.DwgVersion version)
+        private static bool AskOptions(Editor ed, out bool includeSub, out bool useOtherFolder, out Autodesk.AutoCAD.DatabaseServices.DwgVersion version, out bool clean)
         {
             includeSub = false;
             useOtherFolder = false;
-            version = Autodesk.AutoCAD.DatabaseServices.DwgVersion.AC1027;
+            version = Autodesk.AutoCAD.DatabaseServices.DwgVersion.AC1032;
+            clean = true;
 
             var sub = new PromptKeywordOptions("\nGồm cả thư mục con? [Yes/No] <No>: ", "Yes No");
             sub.Keywords.Default = "No";
@@ -97,13 +100,21 @@ namespace DwgToDxf
             useOtherFolder = r2.StringResult == "Other";
 
             var ver = new PromptKeywordOptions(
-                "\nPhiên bản DXF [V2018/V2013/V2010/V2007/V2004/V2000/R12] <V2013>: ",
+                "\nPhiên bản DXF [V2018/V2013/V2010/V2007/V2004/V2000/R12] <V2018>: ",
                 "V2018 V2013 V2010 V2007 V2004 V2000 R12");
-            ver.Keywords.Default = "V2013";
+            ver.Keywords.Default = "V2018";
             ver.AllowNone = true;
             var r3 = ed.GetKeywords(ver);
             if (r3.Status != PromptStatus.OK && r3.Status != PromptStatus.None) return false;
             version = DxfConverter.ParseVersion(r3.StringResult);
+
+            var cl = new PromptKeywordOptions(
+                "\nLàm sạch trước khi xuất (audit, bind xref, phá block, purge)? [Yes/No] <Yes>: ", "Yes No");
+            cl.Keywords.Default = "Yes";
+            cl.AllowNone = true;
+            var r4 = ed.GetKeywords(cl);
+            if (r4.Status != PromptStatus.OK && r4.Status != PromptStatus.None) return false;
+            clean = r4.StringResult != "No";
 
             return true;
         }
