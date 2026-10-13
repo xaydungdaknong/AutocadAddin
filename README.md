@@ -78,15 +78,19 @@ Yes
    - `In` (hoặc `Enter`): sang bước in. `Thoat`: hủy lệnh.
 
    Khung hơi lệch nhau hoặc khác cỡ vẫn được xếp đúng hàng/cột: khung có tâm nằm trong chiều cao (chiều rộng) của khung đầu hàng (đầu cột) được coi là cùng hàng (cột).
-5. **In ra** `[Pdf/Mayin] <Pdf>`:
-   - `Pdf`: in bằng `DWG To PDF.pc3` ra **một file PDF nhiều trang**, mỗi khung một trang theo đúng thứ tự. Hộp thoại hỏi chỗ lưu, tên mặc định `<tên bản vẽ>-<tên layout>.pdf`.
-   - `Mayin`: gửi tới máy in/plotter đang chọn trong page setup của Model/layout (lệnh `PAGESETUP`), tất cả khung trong một lệnh in.
+5. **Hộp thoại in** hiện ra để chọn:
+   - **Máy in**: mọi máy in/plotter của Windows và file `.pc3` của AutoCAD. Máy in ra file (`DWG To PDF.pc3`, DWF...) gộp tất cả khung thành **một file nhiều trang**, mỗi khung một trang theo đúng thứ tự; ô "Lưu vào file" mặc định là `<tên bản vẽ>-<tên layout>.pdf` cạnh bản vẽ. Máy in giấy nhận tất cả khung trong một lệnh in.
+   - **Khổ giấy**: danh sách khổ của máy in đang chọn.
+   - **Tỉ lệ**: `Vừa khổ giấy (Fit)` (mặc định), các tỉ lệ có sẵn `1:1` ... `1:1000`, hoặc gõ tay dạng `1:150`. Tỉ lệ 1:N nghĩa là 1 mm trên giấy bằng N đơn vị bản vẽ. Khi in cả layout có thêm `Theo page setup`.
+   - **Màu nét in**: bảng nét in `.ctb` (hoặc `.stb` nếu bản vẽ dùng kiểu đó), ví dụ `monochrome.ctb` in đen trắng, `acad.ctb` in màu theo bản vẽ, `grayscale.ctb` in thang xám. Mặc định giữ theo page setup.
+
+   Lần đầu hộp thoại lấy giá trị theo page setup của Model/layout (chưa chọn máy in thì lấy `DWG To PDF.pc3`). Các lần sau trong cùng phiên AutoCAD nhớ lựa chọn lần trước.
 
 ### Thiết lập in
 
-- Khổ giấy, bảng nét in (CTB/STB), lineweight lấy theo page setup của Model/layout hiện hành. Nếu in PDF mà page setup đang dùng máy khác và khổ giấy đó không có trong `DWG To PDF.pc3`, lệnh chọn khổ A3. Muốn khổ khác thì đặt page setup dùng `DWG To PDF.pc3` với khổ đó trước.
-- Mỗi khung in kiểu Window theo đúng hình chữ nhật của khung, tỉ lệ vừa khổ giấy (Fit), căn giữa, tự xoay giấy ngang/đứng theo chiều khung.
-- In cả layout (`CaLayout`) giữ nguyên mọi thiết lập của page setup (kiểu in, tỉ lệ), chỉ đổi máy in nếu chọn `Pdf`.
+- Lineweight, kiểu tô bóng và các thiết lập khác không có trong hộp thoại lấy theo page setup của Model/layout hiện hành. Page setup trong bản vẽ không bị thay đổi.
+- Mỗi khung in kiểu Window theo đúng hình chữ nhật của khung, căn giữa, tự xoay giấy ngang/đứng theo chiều khung.
+- In cả layout (`CaLayout`) giữ kiểu in và hướng giấy của page setup, chỉ đổi những gì chọn trong hộp thoại.
 - Khung xoay nghiêng được in theo hình chữ nhật bao ngoài song song trục.
 - Lệnh tạm đặt `BACKGROUNDPLOT` = 0 trong lúc in rồi trả lại giá trị cũ.
 
@@ -96,22 +100,28 @@ Yêu cầu: Windows, Visual Studio 2019/2022 (workload ".NET desktop development
 
 1. Mở `src/DwgToDxf/DwgToDxf.csproj` bằng Visual Studio.
 2. Visual Studio tự tải gói NuGet `AutoCAD.NET 24.2.0` (AcCoreMgd, AcDbMgd, AcMgd). Các DLL này không được copy ra thư mục bin vì AutoCAD đã có sẵn.
-3. Chọn cấu hình `Release`, build. Thư mục bin chỉ có `DwgToDxf.dll`. Kết quả: `src/DwgToDxf/bin/Release/net48/DwgToDxf.dll`.
+3. Chọn cấu hình `Release`, build. Kết quả trong `src/DwgToDxf/bin/Release/net48/`: `DwgToDxf.dll` và file tự nạp `AutocadAddin.lsp`.
 
 Hoặc dùng dòng lệnh: `dotnet build src/DwgToDxf/DwgToDxf.csproj -c Release`.
 
 ## Nạp vào AutoCAD
 
+### Cách nhanh: file LISP tự nạp (không cần NETLOAD)
+
+1. Chép `DwgToDxf.dll` và `AutocadAddin.lsp` vào cùng một thư mục, ví dụ `D:\AutocadAddin`.
+2. `OPTIONS` > Files: thêm thư mục đó vào **Support File Search Path** và **Trusted Locations**.
+   Nếu không muốn thêm vào Support File Search Path, mở `AutocadAddin.lsp` và sửa dòng `*ACA-DLL*` thành đường dẫn đầy đủ tới DLL, ví dụ `(setq *ACA-DLL* "D:/AutocadAddin/DwgToDxf.dll")`.
+3. `APPLOAD` > **Startup Suite** > Contents... > Add, chọn `AutocadAddin.lsp`. Từ đó mỗi lần mở AutoCAD file LISP tự nạp.
+4. Gõ `DWG2DXF`, `INMODEL` hoặc `INLAYOUT` như bình thường. Lần đầu gõ, LISP nạp DLL rồi chạy lệnh; các lần sau AutoCAD chạy thẳng lệnh trong DLL. Lệnh `TAIADDIN` nạp DLL ngay mà không chạy lệnh nào.
+
+LISP chỉ định nghĩa vài lệnh nhỏ nên mở AutoCAD không chậm thêm; DLL chỉ được nạp khi cần.
+
+### Cách thủ công
+
 1. Mở AutoCAD 2023, gõ `NETLOAD`, chọn `DwgToDxf.dll`.
 2. Gõ `DWG2DXF`, `INMODEL` hoặc `INLAYOUT`.
 
 Nếu AutoCAD cảnh báo bảo mật khi nạp DLL, thêm thư mục chứa DLL vào `TRUSTEDPATHS` (Options > Files > Trusted Locations).
-
-Để tự nạp mỗi lần mở AutoCAD, có thể thêm dòng sau vào `acad.lsp` hoặc `acaddoc.lsp`:
-
-```lisp
-(command "_.NETLOAD" "C:/duong/dan/DwgToDxf.dll")
-```
 
 ## Ghi chú
 

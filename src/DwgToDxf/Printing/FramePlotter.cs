@@ -18,16 +18,13 @@ namespace DwgToDxf.Printing
         /// <summary>Các khung in theo thứ tự. Rỗng: in cả layout theo page setup.</summary>
         public List<Frame> Frames { get; set; } = new List<Frame>();
 
-        /// <summary>True: in ra file PDF nhiều trang bằng DWG To PDF.pc3. False: in ra máy in của page setup.</summary>
-        public bool ToPdf { get; set; } = true;
-
-        public string PdfFile { get; set; }
+        public PlotOptions Options { get; set; }
     }
 
     /// <summary>
     /// In nhiều khung trong một lần in (một file PDF nhiều trang, hoặc một lệnh in gửi máy in).
-    /// Thiết lập máy in, khổ giấy, bảng nét in lấy theo page setup của layout; mỗi khung in kiểu Window,
-    /// vừa khổ giấy (Fit), căn giữa, tự xoay giấy theo chiều khung.
+    /// Bắt đầu từ page setup của layout, đè máy in, khổ giấy, tỉ lệ, bảng nét in theo PlotOptions.
+    /// Mỗi khung in kiểu Window, căn giữa, tự xoay giấy theo chiều khung.
     /// </summary>
     public static class FramePlotter
     {
@@ -48,16 +45,11 @@ namespace DwgToDxf.Printing
                 using (var tr = db.TransactionManager.StartTransaction())
                 {
                     var layout = (Layout)tr.GetObject(job.LayoutId, OpenMode.ForRead);
-                    var device = job.ToPdf ? PdfDevice : layout.PlotConfigurationName;
-                    if (string.IsNullOrWhiteSpace(device) || string.Equals(device, "None", StringComparison.OrdinalIgnoreCase))
-                        throw new InvalidOperationException(
-                            "Page setup của \"" + layout.LayoutName + "\" chưa chọn máy in. Hãy chọn máy in bằng lệnh PAGESETUP.");
-
                     var pages = job.Frames.Count > 0
-                        ? job.Frames.Select(f => Settings(tr, ed, layout, device, f)).ToList()
-                        : new List<PlotSettings> { Settings(tr, ed, layout, device, null) };
+                        ? job.Frames.Select(f => Settings(ed, layout, job.Options, f)).ToList()
+                        : new List<PlotSettings> { Settings(ed, layout, job.Options, null) };
 
-                    var done = Run(layout, pages, job.ToPdf ? job.PdfFile : null, doc.Name);
+                    var done = Run(layout, pages, job.Options.OutputFile, doc.Name);
                     foreach (var p in pages) p.Dispose();
                     tr.Commit();
                     return done;
@@ -69,29 +61,39 @@ namespace DwgToDxf.Printing
             }
         }
 
-        private static PlotSettings Settings(Transaction tr, Editor ed, Layout layout, string device, Frame frame)
+        private static PlotSettings Settings(Editor ed, Layout layout, PlotOptions o, Frame frame)
         {
             var ps = new PlotSettings(layout.ModelType);
             ps.CopyFrom(layout);
 
             var psv = PlotSettingsValidator.Current;
-            if (!string.Equals(ps.PlotConfigurationName, device, StringComparison.OrdinalIgnoreCase))
+            psv.SetPlotConfigurationName(ps, o.Device, null);
+            psv.RefreshLists(ps);
+            psv.SetCanonicalMediaName(ps, PickMedia(psv, ps, o.Media ?? layout.CanonicalMediaName));
+            if (o.StyleSheet != null) psv.SetCurrentStyleSheet(ps, o.StyleSheet);
+
+            if (frame != null)
             {
-                psv.SetPlotConfigurationName(ps, device, null);
-                psv.RefreshLists(ps);
-                psv.SetCanonicalMediaName(ps, PickMedia(psv, ps, layout.CanonicalMediaName));
-            }
-            else
-            {
-                psv.RefreshLists(ps);
+                psv.SetPlotWindowArea(ps, ToDcs(ed, frame));
+                psv.SetPlotType(ps, Autodesk.AutoCAD.DatabaseServices.PlotType.Window);
             }
 
-            if (frame == null) return ps; // in cả layout: giữ nguyên kiểu in, tỉ lệ của page setup
+            switch (o.Scale)
+            {
+                case PlotOptions.ScaleMode.Fit:
+                    psv.SetUseStandardScale(ps, true);
+                    psv.SetStdScaleType(ps, StdScaleType.ScaleToFit);
+                    break;
+                case PlotOptions.ScaleMode.Custom:
+                    // 1 mm trên giấy = N đơn vị bản vẽ.
+                    psv.SetPlotPaperUnits(ps, PlotPaperUnit.Millimeters);
+                    psv.SetUseStandardScale(ps, false);
+                    psv.SetCustomPrintScale(ps, new CustomScale(1, o.ScaleDenominator));
+                    break;
+            }
 
-            psv.SetPlotWindowArea(ps, ToDcs(ed, frame));
-            psv.SetPlotType(ps, Autodesk.AutoCAD.DatabaseServices.PlotType.Window);
-            psv.SetUseStandardScale(ps, true);
-            psv.SetStdScaleType(ps, StdScaleType.ScaleToFit);
+            if (frame == null) return ps; // in cả layout: giữ kiểu in, hướng giấy của page setup
+
             psv.SetPlotCentered(ps, true);
 
             // Xoay giấy cho cùng chiều với khung (ngang/đứng).
@@ -102,7 +104,7 @@ namespace DwgToDxf.Printing
             return ps;
         }
 
-        /// <summary>Giữ khổ giấy của page setup nếu máy mới có, nếu không thì ưu tiên A3 (full bleed).</summary>
+        /// <summary>Khổ giấy đã chọn nếu máy in có, nếu không thì ưu tiên A3 (full bleed).</summary>
         private static string PickMedia(PlotSettingsValidator psv, PlotSettings ps, string wanted)
         {
             var list = psv.GetCanonicalMediaNameList(ps).Cast<string>().ToList();
@@ -133,7 +135,7 @@ namespace DwgToDxf.Printing
             return new Extents2d(pts.Min(p => p.X), pts.Min(p => p.Y), pts.Max(p => p.X), pts.Max(p => p.Y));
         }
 
-        private static int Run(Layout layout, List<PlotSettings> pages, string pdfFile, string docName)
+        private static int Run(Layout layout, List<PlotSettings> pages, string outputFile, string docName)
         {
             var count = pages.Count;
             using (var pe = PlotFactory.CreatePublishEngine())
@@ -160,7 +162,7 @@ namespace DwgToDxf.Printing
                         piv.Validate(pi);
 
                         if (i == 0)
-                            pe.BeginDocument(pi, docName, null, 1, pdfFile != null, pdfFile);
+                            pe.BeginDocument(pi, docName, null, 1, outputFile != null, outputFile);
 
                         ppd.set_PlotMsgString(PlotMessageIndex.Status, "Trang " + (i + 1) + "/" + count);
                         ppd.OnBeginSheet();

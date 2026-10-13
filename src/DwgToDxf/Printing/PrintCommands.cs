@@ -240,23 +240,29 @@ namespace DwgToDxf.Printing
             }
         }
 
+        /// <summary>Mở hộp thoại thiết lập in (máy in, khổ giấy, tỉ lệ, màu nét in) rồi in.</summary>
         private static bool PlotWithOutputChoice(Document doc, ObjectId layoutId, List<Frame> order)
         {
             var ed = doc.Editor;
+            var db = doc.Database;
 
-            var pko = new PromptKeywordOptions("\nIn ra [Pdf/Mayin] <Pdf>: ", "Pdf Mayin");
-            pko.Keywords.Default = "Pdf";
-            pko.AllowNone = true;
-            var pr = ed.GetKeywords(pko);
-            if (pr.Status != PromptStatus.OK && pr.Status != PromptStatus.None) return false;
-            var toPdf = pr.StringResult != "Mayin";
-
-            string pdf = null;
-            if (toPdf)
+            PlotOptions options;
+            using (var tr = db.TransactionManager.StartTransaction())
             {
-                pdf = AskPdfFile(doc, layoutId);
-                if (pdf == null) return false;
+                var layout = (Layout)tr.GetObject(layoutId, OpenMode.ForRead);
+                using (var ps = new PlotSettings(layout.ModelType))
+                {
+                    ps.CopyFrom(layout);
+                    var defaultFile = DefaultOutputFile(doc, layout.LayoutName);
+                    using (var form = new PlotOptionsForm(ps, db.PlotStyleMode, order.Count == 0, defaultFile, Math.Max(1, order.Count)))
+                    {
+                        var shown = Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(form);
+                        options = shown == WinForms.DialogResult.OK ? form.Result : null;
+                    }
+                }
+                tr.Commit();
             }
+            if (options == null) return false;
 
             try
             {
@@ -264,13 +270,12 @@ namespace DwgToDxf.Printing
                 {
                     LayoutId = layoutId,
                     Frames = order,
-                    ToPdf = toPdf,
-                    PdfFile = pdf,
+                    Options = options,
                 });
 
                 if (pages < 0) ed.WriteMessage("\nĐã hủy in.");
-                else if (toPdf) ed.WriteMessage("\nĐã in {0} trang ra {1}\n", pages, pdf);
-                else ed.WriteMessage("\nĐã gửi {0} trang tới máy in.\n", pages);
+                else if (options.OutputFile != null) ed.WriteMessage("\nĐã in {0} trang ra {1}\n", pages, options.OutputFile);
+                else ed.WriteMessage("\nĐã gửi {0} trang tới {1}.\n", pages, options.Device);
                 return pages >= 0;
             }
             catch (System.Exception ex)
@@ -280,29 +285,14 @@ namespace DwgToDxf.Printing
             }
         }
 
-        private static string AskPdfFile(Document doc, ObjectId layoutId)
+        /// <summary>File mặc định (chưa có phần mở rộng): cạnh bản vẽ, tên "bản vẽ-layout".</summary>
+        private static string DefaultOutputFile(Document doc, string layoutName)
         {
-            string layoutName;
-            using (var tr = doc.Database.TransactionManager.StartTransaction())
-            {
-                layoutName = ((Layout)tr.GetObject(layoutId, OpenMode.ForRead)).LayoutName;
-                tr.Commit();
-            }
-
             var dwg = doc.Name;
             var folder = Path.IsPathRooted(dwg) ? Path.GetDirectoryName(dwg) : Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-            var name = Path.GetFileNameWithoutExtension(dwg) + "-" + layoutName + ".pdf";
+            var name = Path.GetFileNameWithoutExtension(dwg) + "-" + layoutName;
             foreach (var c in Path.GetInvalidFileNameChars()) name = name.Replace(c, '_');
-
-            using (var dlg = new WinForms.SaveFileDialog())
-            {
-                dlg.Title = "Lưu file PDF";
-                dlg.Filter = "PDF (*.pdf)|*.pdf";
-                dlg.InitialDirectory = folder;
-                dlg.FileName = name;
-                dlg.OverwritePrompt = true;
-                return dlg.ShowDialog() == WinForms.DialogResult.OK ? dlg.FileName : null;
-            }
+            return Path.Combine(folder, name);
         }
 
         private static ObjectId CurrentLayoutId(Database db)
