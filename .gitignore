@@ -1,0 +1,8 @@
+# Visual Studio / .NET
+.vs/
+bin/
+obj/
+*.user
+*.suo
+packages/
+*.log
