@@ -43,16 +43,22 @@ namespace DwgToDxf.Printing
             return "Khung mẫu phải là block hoặc polyline kín hình chữ nhật.";
         }
 
-        /// <param name="candidates">Đối tượng để xét. Null: mọi đối tượng trong không gian hiện hành.</param>
-        public static List<Frame> Find(Transaction tr, Database db, ObjectId sampleId, IEnumerable<ObjectId> candidates)
+        /// <summary>Quy tắc nhận diện khung từ khung mẫu: tên block, hoặc layer nếu là polyline.</summary>
+        public static void RuleFromSample(Transaction tr, ObjectId sampleId, out string blockName, out string layer)
         {
             var sample = (Entity)tr.GetObject(sampleId, OpenMode.ForRead);
-            var blockName = sample is BlockReference sbr ? EffectiveName(tr, sbr) : null;
-            var layer = sample.Layer;
+            blockName = sample is BlockReference br ? EffectiveName(tr, br) : null;
+            layer = blockName == null ? sample.Layer : null;
+        }
 
+        /// <param name="spaceId">Model space hoặc paper space của một layout.</param>
+        /// <param name="blockName">Tìm block reference tên này. Null: tìm polyline chữ nhật trên <paramref name="layer"/>.</param>
+        /// <param name="candidates">Đối tượng để xét. Null: mọi đối tượng trong <paramref name="spaceId"/>.</param>
+        public static List<Frame> Find(Transaction tr, ObjectId spaceId, string blockName, string layer, IEnumerable<ObjectId> candidates)
+        {
             if (candidates == null)
             {
-                var space = (BlockTableRecord)tr.GetObject(db.CurrentSpaceId, OpenMode.ForRead);
+                var space = (BlockTableRecord)tr.GetObject(spaceId, OpenMode.ForRead);
                 candidates = space.Cast<ObjectId>();
             }
 
@@ -64,7 +70,7 @@ namespace DwgToDxf.Printing
                 if (ent == null || !ent.Visible) continue;
 
                 Frame f = null;
-                if (blockName != null)
+                if (!string.IsNullOrEmpty(blockName))
                 {
                     if (ent is BlockReference br && string.Equals(EffectiveName(tr, br), blockName, StringComparison.OrdinalIgnoreCase))
                         f = FromBlock(tr, br);

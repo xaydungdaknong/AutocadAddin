@@ -6,6 +6,9 @@ namespace DwgToDxf.Printing
     /// <summary>Sắp xếp thứ tự in các khung.</summary>
     public static class FrameOrder
     {
+        public static List<Frame> Sort(IEnumerable<Frame> frames, OrderMode mode) =>
+            mode == OrderMode.Columns ? ByColumns(frames) : ByRows(frames);
+
         /// <summary>
         /// Theo hàng: từ trên xuống dưới, trong mỗi hàng từ trái sang phải.
         /// Khung có tâm nằm trong chiều cao của khung đầu hàng được xem là cùng hàng,

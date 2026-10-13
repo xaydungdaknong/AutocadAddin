@@ -3,7 +3,7 @@
 Addin .NET cho **AutoCAD 2023**, gồm hai nhóm lệnh trong cùng một file `DwgToDxf.dll`:
 
 - [`DWG2DXF`](#dwg2dxf): chuyển hàng loạt file `.dwg` trong một thư mục sang `.dxf`.
-- [`INMODEL`, `INLAYOUT`](#in-theo-khung-inmodel-inlayout): in nhiều khung bản vẽ trong Model hoặc Layout, xem và đổi thứ tự in trước khi in.
+- [`CAIDATIN`, `INMODEL`, `INLAYOUT`, `INNHIEUFILE`](#in-ấn): cài đặt và lưu cấu hình in, in nhiều khung trong Model hoặc Layout (xem và đổi thứ tự trước khi in), in hàng loạt nhiều file trong thư mục.
 
 ## DWG2DXF
 
@@ -54,43 +54,74 @@ V2018
 Yes
 ```
 
-## In theo khung: INMODEL, INLAYOUT
+## In ấn
 
 | Lệnh | Dùng khi |
 |---|---|
-| `INMODEL` | In các khung vẽ trong Model. Đang ở layout thì lệnh tự chuyển sang tab Model. |
-| `INLAYOUT` | In layout hiện hành. Layout chỉ có một khung giấy thì nhấn `Enter` để in cả layout; layout có nhiều khung thì chọn khung như `INMODEL`. |
+| `CAIDATIN` | Mở công cụ cài đặt in: tạo, lưu, chọn cấu hình in; từ đây bấm nút để in Model, in layout hoặc in nhiều file. |
+| `INMODEL` | In các khung/vùng trong Model. Đang ở layout thì lệnh tự chuyển sang tab Model. |
+| `INLAYOUT` | In layout hiện hành. Layout chỉ có một khung giấy thì in cả layout; nhiều khung thì chọn khung như `INMODEL`. |
+| `INNHIEUFILE` | Giống `CAIDATIN`, dùng để in nhiều file: chọn thư mục ở mục "In nhiều file" rồi bấm **In nhiều file**. |
+| `INNHIEUFILECHAY` | In nhiều file ngay theo cấu hình đang dùng, không mở hộp thoại (dùng trong script). |
 
-### Các bước
+### Quy trình gọn nhất
 
-1. **Chọn một khung mẫu.** Khung là block (ví dụ block khung tên A3) hoặc polyline kín hình chữ nhật.
-   - Khung mẫu là block: lấy mọi block cùng tên (kể cả dynamic block có kích thước khác nhau).
-   - Khung mẫu là polyline: lấy mọi polyline chữ nhật kín nằm trên **cùng layer** với khung mẫu.
-   - Khung nằm trọn trong khung khác (ví dụ ô chữ nhật trong khung tên) tự được bỏ qua.
-   - Ở `INLAYOUT`, nhấn `Enter` (`CaLayout`) thay vì chọn khung để in thẳng cả layout theo page setup. Nếu chọn khung mà layout chỉ có một khung, lệnh cũng in cả layout.
-2. **Chọn vùng chứa các khung**, hoặc nhấn `Enter` để lấy tất cả trong Model/layout hiện hành.
-3. **Xem thứ tự in.** Mỗi khung được viền màu xanh lơ và hiện số thứ tự màu đỏ ở giữa. Số này chỉ là hình ảo trên màn hình, không ghi vào bản vẽ và tự mất khi lệnh kết thúc. Thứ tự ban đầu là theo hàng.
-4. **Đổi thứ tự** ở dòng nhắc `Thứ tự in [Hang/Cot/Bam/Sua/In/Thoat] <In>`:
-   - `Hang`: theo hàng, từ trên xuống dưới, trong mỗi hàng từ trái sang phải.
-   - `Cot`: theo cột, từ trái sang phải, trong mỗi cột từ trên xuống dưới.
-   - `Bam`: bấm lần lượt vào bên trong các khung theo thứ tự muốn in, số hiện ngay khi bấm. Nhấn `Enter` để dừng; các khung chưa bấm được xếp tiếp theo hàng.
-   - `Sua`: sửa thủ công. Bấm vào một khung, gõ số thứ tự mới; các khung khác tự dồn số. Lặp lại cho khung khác, `Enter` để xong.
-   - `In` (hoặc `Enter`): sang bước in. `Thoat`: hủy lệnh.
+1. Gõ `CAIDATIN` một lần, đặt tên cấu hình (ví dụ `A3 đen trắng`), bấm **Chọn khung mẫu...** rồi chọn khung tên trên bản vẽ, chọn máy in, khổ giấy, tỉ lệ, màu nét in, bấm **Lưu**.
+2. Từ đó mỗi lần in chỉ cần: `INMODEL` (hoặc `INLAYOUT`) → `Enter` (dùng cấu hình) → `Enter` (lấy tất cả khung) → xem số thứ tự → `Enter` (in). File PDF được lưu ngay, không hỏi thêm.
+3. In cả thư mục: `INNHIEUFILE` → chọn thư mục → **In nhiều file**.
+
+### Cấu hình in (`CAIDATIN`)
+
+Hộp thoại gồm:
+
+- **Cấu hình**: ô chọn/gõ tên cấu hình, nút **Lưu** (thêm mới hoặc ghi đè theo tên) và **Xóa**. Mọi cấu hình lưu ở `%APPDATA%\AutocadAddin\CauHinhIn.xml`, dùng chung cho mọi bản vẽ và mọi lần mở AutoCAD. Bấm một nút in cũng tự lưu cấu hình đang chọn.
+- **Vùng in**:
+  - `Khung` + nút **Chọn khung mẫu...**: bấm vào một khung trên bản vẽ. Khung mẫu là block thì lấy mọi block cùng tên (kể cả dynamic block khác kích thước); là polyline chữ nhật kín thì lấy mọi polyline chữ nhật kín trên **cùng layer**. Khung nằm trọn trong khung khác (ô trong khung tên) tự được bỏ qua.
+  - `Vùng` + nút **Chọn vùng...**: quét một hình chữ nhật. Tọa độ được lưu, hợp với các bản vẽ dùng chung một khung đặt cùng vị trí.
+  - `Cả layout / cả bản vẽ`: in cả layout theo layout, trong Model in toàn bộ bản vẽ (extents).
+  - **Thứ tự in**: theo hàng hoặc theo cột (dùng khi in nhiều khung).
+- **Máy in**:
+  - **Máy in**: mọi máy in/plotter của Windows và file `.pc3`. Máy in ra file (`DWG To PDF.pc3`, DWF...) gộp tất cả trang vào **một file nhiều trang**.
+  - **Khổ giấy**: danh sách khổ của máy in đang chọn.
+  - **Tỉ lệ**: `Vừa khổ giấy (Fit)`, các tỉ lệ `1:1` ... `1:1000`, hoặc gõ tay dạng `1:150` (1 mm giấy = 150 đơn vị bản vẽ).
+  - **Màu nét in**: `monochrome.ctb` (đen trắng), `acad.ctb` (màu theo bản vẽ), `grayscale.ctb` (thang xám)... hoặc giữ theo page setup. Chỉ hiện bảng `.ctb` hoặc `.stb` đúng kiểu của bản vẽ.
+  - **Lưu file vào**: thư mục lưu PDF. Để trống thì lưu cạnh bản vẽ. Tên file: `<tên bản vẽ>-<tên layout>.pdf` khi in một bản vẽ, `<tên bản vẽ>.pdf` khi in nhiều file.
+- **In nhiều file**: thư mục chứa DWG, có gồm thư mục con không, in trong `Model`, `Các layout` hay `Model và các layout`.
+- Nút **In Model**, **In layout này**, **In nhiều file**, **Hủy**.
+
+### In một bản vẽ (`INMODEL`, `INLAYOUT`)
+
+1. Dòng lệnh nhắc cấu hình đang dùng, rồi hỏi `Chọn một khung mẫu hoặc [CauHinh/Vung/ToanBo]`:
+   - Bấm vào một khung: dùng khung đó làm mẫu (và nhớ vào cấu hình đang dùng).
+   - `CauHinh` (mặc định khi cấu hình đã có vùng in): dùng vùng in của cấu hình.
+   - `Vung`: quét lần lượt từng hình chữ nhật cần in, mỗi hình một trang, `Enter` để xong. Thứ tự in là thứ tự quét.
+   - `ToanBo`: in cả layout / cả bản vẽ.
+2. Khi dùng khung: chọn vùng chứa các khung, hoặc `Enter` để lấy tất cả.
+3. **Xem thứ tự in.** Mỗi khung được viền xanh lơ và hiện số thứ tự màu đỏ ở giữa. Số này chỉ là hình ảo trên màn hình, không ghi vào bản vẽ. Dòng nhắc `Thứ tự in [Hang/Cot/Bam/Sua/CaiDat/In/Thoat] <In>`:
+   - `Hang`: theo hàng, trên xuống dưới, trái sang phải. `Cot`: theo cột, trái sang phải, trên xuống dưới.
+   - `Bam`: bấm lần lượt vào các khung theo thứ tự muốn in, `Enter` để dừng; khung chưa bấm xếp tiếp theo hàng.
+   - `Sua`: sửa thủ công. Bấm vào một khung, gõ số mới; các khung khác tự dồn số.
+   - `CaiDat`: mở hộp thoại máy in, khổ giấy, tỉ lệ, màu nét in trước khi in.
+   - `In` (hoặc `Enter`): in ngay theo cấu hình. Nếu cấu hình chưa có máy in, hộp thoại máy in tự mở.
 
    Khung hơi lệch nhau hoặc khác cỡ vẫn được xếp đúng hàng/cột: khung có tâm nằm trong chiều cao (chiều rộng) của khung đầu hàng (đầu cột) được coi là cùng hàng (cột).
-5. **Hộp thoại in** hiện ra để chọn:
-   - **Máy in**: mọi máy in/plotter của Windows và file `.pc3` của AutoCAD. Máy in ra file (`DWG To PDF.pc3`, DWF...) gộp tất cả khung thành **một file nhiều trang**, mỗi khung một trang theo đúng thứ tự; ô "Lưu vào file" mặc định là `<tên bản vẽ>-<tên layout>.pdf` cạnh bản vẽ. Máy in giấy nhận tất cả khung trong một lệnh in.
-   - **Khổ giấy**: danh sách khổ của máy in đang chọn.
-   - **Tỉ lệ**: `Vừa khổ giấy (Fit)` (mặc định), các tỉ lệ có sẵn `1:1` ... `1:1000`, hoặc gõ tay dạng `1:150`. Tỉ lệ 1:N nghĩa là 1 mm trên giấy bằng N đơn vị bản vẽ. Khi in cả layout có thêm `Theo page setup`.
-   - **Màu nét in**: bảng nét in `.ctb` (hoặc `.stb` nếu bản vẽ dùng kiểu đó), ví dụ `monochrome.ctb` in đen trắng, `acad.ctb` in màu theo bản vẽ, `grayscale.ctb` in thang xám. Mặc định giữ theo page setup.
+4. File PDF đã có sẵn thì lệnh hỏi ghi đè.
 
-   Lần đầu hộp thoại lấy giá trị theo page setup của Model/layout (chưa chọn máy in thì lấy `DWG To PDF.pc3`). Các lần sau trong cùng phiên AutoCAD nhớ lựa chọn lần trước.
+Gọi từ nút **In Model** / **In layout này** của `CAIDATIN` thì bước 1 và 2 được bỏ qua: lệnh dùng thẳng vùng in của cấu hình và lấy tất cả khung.
 
-### Thiết lập in
+### In nhiều file
 
-- Lineweight, kiểu tô bóng và các thiết lập khác không có trong hộp thoại lấy theo page setup của Model/layout hiện hành. Page setup trong bản vẽ không bị thay đổi.
-- Mỗi khung in kiểu Window theo đúng hình chữ nhật của khung, căn giữa, tự xoay giấy ngang/đứng theo chiều khung.
-- In cả layout (`CaLayout`) giữ kiểu in và hướng giấy của page setup, chỉ đổi những gì chọn trong hộp thoại.
+Mỗi bản vẽ trong thư mục được mở chỉ đọc, in, rồi đóng lại không lưu (bản vẽ đang mở sẵn thì in luôn và giữ nguyên). Với mỗi bản vẽ:
+
+- Model: in các khung tìm được theo thứ tự của cấu hình. Không có khung nào thì bỏ qua Model.
+- Mỗi layout (theo thứ tự tab): có từ 2 khung trở lên thì in từng khung; một khung hoặc không có khung thì in cả layout. Layout trống (chưa vẽ gì) được bỏ qua.
+- Tất cả trang của một bản vẽ vào một file PDF `<tên bản vẽ>.pdf`. Chọn thư mục "Lưu file vào" thì cấu trúc thư mục con được giữ nguyên.
+- Nhật ký `InNhieuFile_yyyyMMdd_HHmmss.log` ghi vào thư mục lưu file (hoặc thư mục bản vẽ): file nào in được bao nhiêu trang, file nào lỗi và lý do. Bấm **Hủy cả lệnh in** trên hộp tiến độ để dừng.
+
+### Thiết lập in khác
+
+- Lineweight, kiểu tô bóng và các thiết lập khác không có trong hộp thoại lấy theo page setup của Model/layout. Page setup trong bản vẽ không bị thay đổi.
+- Mỗi khung/vùng in kiểu Window, căn giữa, tự xoay giấy ngang/đứng theo chiều khung. In cả layout giữ hướng giấy của page setup.
 - Khung xoay nghiêng được in theo hình chữ nhật bao ngoài song song trục.
 - Lệnh tạm đặt `BACKGROUNDPLOT` = 0 trong lúc in rồi trả lại giá trị cũ.
 
@@ -112,14 +143,14 @@ Hoặc dùng dòng lệnh: `dotnet build src/DwgToDxf/DwgToDxf.csproj -c Release
 2. `OPTIONS` > Files: thêm thư mục đó vào **Support File Search Path** và **Trusted Locations**.
    Nếu không muốn thêm vào Support File Search Path, mở `AutocadAddin.lsp` và sửa dòng `*ACA-DLL*` thành đường dẫn đầy đủ tới DLL, ví dụ `(setq *ACA-DLL* "D:/AutocadAddin/DwgToDxf.dll")`.
 3. `APPLOAD` > **Startup Suite** > Contents... > Add, chọn `AutocadAddin.lsp`. Từ đó mỗi lần mở AutoCAD file LISP tự nạp.
-4. Gõ `DWG2DXF`, `INMODEL` hoặc `INLAYOUT` như bình thường. Lần đầu gõ, LISP nạp DLL rồi chạy lệnh; các lần sau AutoCAD chạy thẳng lệnh trong DLL. Lệnh `TAIADDIN` nạp DLL ngay mà không chạy lệnh nào.
+4. Gõ `CAIDATIN`, `INMODEL`, `INLAYOUT`, `INNHIEUFILE` hoặc `DWG2DXF` như bình thường. Lần đầu gõ, LISP nạp DLL rồi chạy lệnh; các lần sau AutoCAD chạy thẳng lệnh trong DLL. Lệnh `TAIADDIN` nạp DLL ngay mà không chạy lệnh nào.
 
 LISP chỉ định nghĩa vài lệnh nhỏ nên mở AutoCAD không chậm thêm; DLL chỉ được nạp khi cần.
 
 ### Cách thủ công
 
 1. Mở AutoCAD 2023, gõ `NETLOAD`, chọn `DwgToDxf.dll`.
-2. Gõ `DWG2DXF`, `INMODEL` hoặc `INLAYOUT`.
+2. Gõ `CAIDATIN`, `INMODEL`, `INLAYOUT`, `INNHIEUFILE` hoặc `DWG2DXF`.
 
 Nếu AutoCAD cảnh báo bảo mật khi nạp DLL, thêm thư mục chứa DLL vào `TRUSTEDPATHS` (Options > Files > Trusted Locations).
 

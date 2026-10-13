@@ -3,56 +3,63 @@ using System.Collections.Generic;
 using System.Linq;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
-using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.PlottingServices;
 using AcApp = Autodesk.AutoCAD.ApplicationServices.Core.Application;
 
 namespace DwgToDxf.Printing
 {
-    public class PlotJob
+    /// <summary>Một trang in: một khung (hoặc vùng) trong một layout, hoặc cả layout nếu Frame = null.</summary>
+    public class PlotPage
     {
-        /// <summary>Layout dùng làm page setup (Model hoặc layout giấy).</summary>
         public ObjectId LayoutId { get; set; }
-
-        /// <summary>Các khung in theo thứ tự. Rỗng: in cả layout theo page setup.</summary>
-        public List<Frame> Frames { get; set; } = new List<Frame>();
-
-        public PlotOptions Options { get; set; }
+        public Frame Frame { get; set; }
     }
 
     /// <summary>
-    /// In nhiều khung trong một lần in (một file PDF nhiều trang, hoặc một lệnh in gửi máy in).
-    /// Bắt đầu từ page setup của layout, đè máy in, khổ giấy, tỉ lệ, bảng nét in theo PlotOptions.
-    /// Mỗi khung in kiểu Window, căn giữa, tự xoay giấy theo chiều khung.
+    /// In nhiều trang trong một lần in: một file nhiều trang (PDF, DWF) hoặc một lệnh in gửi máy in.
+    /// Các trang có thể thuộc nhiều layout của cùng một bản vẽ.
+    /// Mỗi trang bắt đầu từ page setup của layout, đè máy in, khổ giấy, tỉ lệ, bảng nét in theo cấu hình in.
+    /// Khung/vùng in kiểu Window, căn giữa, tự xoay giấy theo chiều khung. Page setup trong bản vẽ không bị đổi.
     /// </summary>
     public static class FramePlotter
     {
         public const string PdfDevice = "DWG To PDF.pc3";
 
+        /// <param name="outputFile">File đầu ra khi máy in chỉ in ra file. Null: gửi tới máy in.</param>
         /// <returns>Số trang đã in, -1 nếu người dùng hủy.</returns>
-        public static int Plot(Document doc, PlotJob job)
+        public static int Plot(Document doc, IList<PlotPage> pages, PrintProfile profile, string outputFile)
         {
+            if (pages.Count == 0) return 0;
             if (PlotFactory.ProcessPlotState != ProcessPlotState.NotPlotting)
                 throw new InvalidOperationException("AutoCAD đang in một bản vẽ khác, hãy thử lại sau.");
+            if (string.IsNullOrEmpty(profile.Device))
+                throw new InvalidOperationException("Cấu hình in chưa chọn máy in.");
 
             var db = doc.Database;
-            var ed = doc.Editor;
             var oldBackground = AcApp.GetSystemVariable("BACKGROUNDPLOT");
             AcApp.SetSystemVariable("BACKGROUNDPLOT", 0);
             try
             {
                 using (var tr = db.TransactionManager.StartTransaction())
                 {
-                    var layout = (Layout)tr.GetObject(job.LayoutId, OpenMode.ForRead);
-                    var pages = job.Frames.Count > 0
-                        ? job.Frames.Select(f => Settings(ed, layout, job.Options, f)).ToList()
-                        : new List<PlotSettings> { Settings(ed, layout, job.Options, null) };
-
-                    var done = Run(layout, pages, job.Options.OutputFile, doc.Name);
-                    foreach (var p in pages) p.Dispose();
-                    tr.Commit();
-                    return done;
+                    var modelToDcs = ModelWorldToDcs(tr, db);
+                    var settings = new List<(Layout layout, PlotSettings ps)>();
+                    try
+                    {
+                        foreach (var page in pages)
+                        {
+                            var layout = (Layout)tr.GetObject(page.LayoutId, OpenMode.ForRead);
+                            settings.Add((layout, Settings(layout, profile, page.Frame, modelToDcs)));
+                        }
+                        var done = Run(settings, outputFile, doc.Name);
+                        tr.Commit();
+                        return done;
+                    }
+                    finally
+                    {
+                        foreach (var s in settings) s.ps.Dispose();
+                    }
                 }
             }
             finally
@@ -61,7 +68,7 @@ namespace DwgToDxf.Printing
             }
         }
 
-        private static PlotSettings Settings(Editor ed, Layout layout, PlotOptions o, Frame frame)
+        private static PlotSettings Settings(Layout layout, PrintProfile o, Frame frame, Matrix3d modelToDcs)
         {
             var ps = new PlotSettings(layout.ModelType);
             ps.CopyFrom(layout);
@@ -69,43 +76,50 @@ namespace DwgToDxf.Printing
             var psv = PlotSettingsValidator.Current;
             psv.SetPlotConfigurationName(ps, o.Device, null);
             psv.RefreshLists(ps);
-            psv.SetCanonicalMediaName(ps, PickMedia(psv, ps, o.Media ?? layout.CanonicalMediaName));
-            if (o.StyleSheet != null) psv.SetCurrentStyleSheet(ps, o.StyleSheet);
+            var media = PickMedia(psv, ps, o.Media ?? layout.CanonicalMediaName);
+            if (media != null) psv.SetCanonicalMediaName(ps, media);
+            if (!string.IsNullOrEmpty(o.StyleSheet)) psv.SetCurrentStyleSheet(ps, o.StyleSheet);
 
             if (frame != null)
             {
-                psv.SetPlotWindowArea(ps, ToDcs(ed, frame));
+                psv.SetPlotWindowArea(ps, ToDcs(frame, layout.ModelType ? modelToDcs : Matrix3d.Identity));
                 psv.SetPlotType(ps, Autodesk.AutoCAD.DatabaseServices.PlotType.Window);
             }
-
-            switch (o.Scale)
+            else
             {
-                case PlotOptions.ScaleMode.Fit:
-                    psv.SetUseStandardScale(ps, true);
-                    psv.SetStdScaleType(ps, StdScaleType.ScaleToFit);
-                    break;
-                case PlotOptions.ScaleMode.Custom:
-                    // 1 mm trên giấy = N đơn vị bản vẽ.
-                    psv.SetPlotPaperUnits(ps, PlotPaperUnit.Millimeters);
-                    psv.SetUseStandardScale(ps, false);
-                    psv.SetCustomPrintScale(ps, new CustomScale(1, o.ScaleDenominator));
-                    break;
+                psv.SetPlotType(ps, layout.ModelType
+                    ? Autodesk.AutoCAD.DatabaseServices.PlotType.Extents
+                    : Autodesk.AutoCAD.DatabaseServices.PlotType.Layout);
             }
 
-            if (frame == null) return ps; // in cả layout: giữ kiểu in, hướng giấy của page setup
+            if (o.Scale == ScaleMode.Custom && o.ScaleDenominator > 0)
+            {
+                // 1 mm trên giấy = N đơn vị bản vẽ.
+                psv.SetPlotPaperUnits(ps, PlotPaperUnit.Millimeters);
+                psv.SetUseStandardScale(ps, false);
+                psv.SetCustomPrintScale(ps, new CustomScale(1, o.ScaleDenominator));
+            }
+            else
+            {
+                psv.SetUseStandardScale(ps, true);
+                psv.SetStdScaleType(ps, StdScaleType.ScaleToFit);
+            }
 
             psv.SetPlotCentered(ps, true);
 
-            // Xoay giấy cho cùng chiều với khung (ngang/đứng).
-            var paper = ps.PlotPaperSize;
-            var paperLandscape = paper.X >= paper.Y;
-            var frameLandscape = frame.Width >= frame.Height;
-            psv.SetPlotRotation(ps, paperLandscape == frameLandscape ? PlotRotation.Degrees000 : PlotRotation.Degrees090);
+            // Xoay giấy cho cùng chiều với khung (ngang/đứng). In cả layout thì giữ hướng của page setup.
+            if (frame != null)
+            {
+                var paper = ps.PlotPaperSize;
+                var paperLandscape = paper.X >= paper.Y;
+                var frameLandscape = frame.Width >= frame.Height;
+                psv.SetPlotRotation(ps, paperLandscape == frameLandscape ? PlotRotation.Degrees000 : PlotRotation.Degrees090);
+            }
             return ps;
         }
 
         /// <summary>Khổ giấy đã chọn nếu máy in có, nếu không thì ưu tiên A3 (full bleed).</summary>
-        private static string PickMedia(PlotSettingsValidator psv, PlotSettings ps, string wanted)
+        public static string PickMedia(PlotSettingsValidator psv, PlotSettings ps, string wanted)
         {
             var list = psv.GetCanonicalMediaNameList(ps).Cast<string>().ToList();
             if (list.Count == 0) return null;
@@ -115,27 +129,33 @@ namespace DwgToDxf.Printing
                 ?? list[0];
         }
 
-        /// <summary>Cửa sổ in tính trong hệ tọa độ màn hình (DCS) của khung nhìn hiện hành.</summary>
-        private static Extents2d ToDcs(Editor ed, Frame f)
+        /// <summary>
+        /// Cửa sổ in trong Model tính theo hệ tọa độ màn hình (DCS) của khung nhìn Model đang hoạt động.
+        /// Với mặt bằng thông thường (nhìn từ trên xuống, không xoay) DCS chỉ lệch WCS một đoạn bằng target.
+        /// </summary>
+        private static Matrix3d ModelWorldToDcs(Transaction tr, Database db)
         {
-            Matrix3d worldToEye;
-            using (var view = ed.GetCurrentView())
-            {
-                worldToEye = (Matrix3d.Rotation(-view.ViewTwist, view.ViewDirection, view.Target) *
-                              Matrix3d.Displacement(view.Target - Point3d.Origin) *
-                              Matrix3d.PlaneToWorld(view.ViewDirection)).Inverse();
-            }
+            var vpt = (ViewportTable)tr.GetObject(db.ViewportTableId, OpenMode.ForRead);
+            if (!vpt.Has("*Active")) return Matrix3d.Identity;
+            var vp = (ViewportTableRecord)tr.GetObject(vpt["*Active"], OpenMode.ForRead);
+            var eyeToWorld = Matrix3d.Rotation(-vp.ViewTwist, vp.ViewDirection, vp.Target) *
+                             Matrix3d.Displacement(vp.Target - Point3d.Origin) *
+                             Matrix3d.PlaneToWorld(vp.ViewDirection);
+            return eyeToWorld.Inverse();
+        }
 
+        private static Extents2d ToDcs(Frame f, Matrix3d worldToDcs)
+        {
             var pts = new[]
             {
                 new Point3d(f.MinX, f.MinY, 0), new Point3d(f.MaxX, f.MinY, 0),
                 new Point3d(f.MaxX, f.MaxY, 0), new Point3d(f.MinX, f.MaxY, 0),
-            }.Select(p => p.TransformBy(worldToEye)).ToList();
+            }.Select(p => p.TransformBy(worldToDcs)).ToList();
 
             return new Extents2d(pts.Min(p => p.X), pts.Min(p => p.Y), pts.Max(p => p.X), pts.Max(p => p.Y));
         }
 
-        private static int Run(Layout layout, List<PlotSettings> pages, string outputFile, string docName)
+        private static int Run(List<(Layout layout, PlotSettings ps)> pages, string outputFile, string docName)
         {
             var count = pages.Count;
             using (var pe = PlotFactory.CreatePublishEngine())
@@ -155,7 +175,7 @@ namespace DwgToDxf.Printing
 
                 for (var i = 0; i < count; i++)
                 {
-                    using (var pi = new PlotInfo { Layout = layout.ObjectId, OverrideSettings = pages[i] })
+                    using (var pi = new PlotInfo { Layout = pages[i].layout.ObjectId, OverrideSettings = pages[i].ps })
                     using (var piv = new PlotInfoValidator { MediaMatchingPolicy = MatchingPolicy.MatchEnabled })
                     using (var ppi = new PlotPageInfo())
                     {
