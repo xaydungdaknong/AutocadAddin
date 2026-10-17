@@ -274,8 +274,8 @@ namespace DwgToDxf
                     {
                         var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
                         bool empty =
-                            (ent is DBText t && string.IsNullOrWhiteSpace(t.TextString)) ||
-                            (ent is MText m && string.IsNullOrWhiteSpace(m.Text)) ||
+                            (ent is DBText t && Compat.IsBlank(t.TextString)) ||
+                            (ent is MText m && Compat.IsBlank(m.Text)) ||
                             (ent is Line l && l.Length < Tolerance.Global.EqualPoint);
                         if (!empty) continue;
                         try

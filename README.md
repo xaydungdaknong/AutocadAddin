@@ -1,6 +1,6 @@
 # AutocadAddin
 
-Addin .NET cho **AutoCAD 2023**, gồm hai nhóm lệnh trong cùng một file `DwgToDxf.dll`:
+Addin .NET cho **AutoCAD 2023** và **AutoCAD 2010**, gồm hai nhóm lệnh trong cùng một file `DwgToDxf.dll`:
 
 - [`DWG2DXF`](#dwg2dxf): chuyển hàng loạt file `.dwg` trong một thư mục sang `.dxf`.
 - [`CAIDATIN`, `INMODEL`, `INLAYOUT`, `INNHIEUFILE`](#in-ấn): cài đặt và lưu cấu hình in, in nhiều khung trong Model hoặc Layout (xem và đổi thứ tự trước khi in), in hàng loạt nhiều file trong thư mục.
@@ -24,7 +24,7 @@ Các tùy chọn được hỏi:
 
 1. **Gồm cả thư mục con?** `Yes` / `No` (mặc định `No`).
 2. **Lưu DXF vào đâu?** `Same` = cạnh file DWG gốc (mặc định), `Other` = chọn thư mục đích. Khi chọn thư mục đích, cấu trúc thư mục con được giữ nguyên.
-3. **Phiên bản DXF**: `V2018` (mặc định), `V2013`, `V2010`, `V2007`, `V2004`, `V2000`, `R12`.
+3. **Phiên bản DXF**: `V2018` (mặc định), `V2013`, `V2010`, `V2007`, `V2004`, `V2000`, `R12`. Bản cho AutoCAD 2010 chỉ có từ `V2010` trở xuống (mặc định `V2010`).
 4. **Làm sạch trước khi xuất?** `Yes` (mặc định) / `No`.
 
 ### Các bước làm sạch
@@ -121,7 +121,7 @@ Mỗi bản vẽ trong thư mục được mở chỉ đọc, in, rồi đóng l
 ### Thiết lập in khác
 
 - Lineweight, kiểu tô bóng và các thiết lập khác không có trong hộp thoại lấy theo page setup của Model/layout. Page setup trong bản vẽ không bị thay đổi.
-- Mỗi khung/vùng in kiểu Window, căn giữa, tự xoay giấy ngang/đứng theo chiều khung. In cả layout giữ hướng giấy của page setup.
+- **Tự xoay giấy theo hướng khung:** khung/vùng in ngang (rộng hơn cao) thì in giấy ngang, khung dọc thì in giấy dọc, tính riêng cho từng trang nên một file PDF có thể lẫn trang ngang và trang dọc. In toàn bộ Model cũng xoay theo hình dạng bản vẽ. In cả layout giữ hướng giấy của page setup. Mỗi khung in kiểu Window, căn giữa.
 - Khung xoay nghiêng được in theo hình chữ nhật bao ngoài song song trục.
 - Lệnh tạm đặt `BACKGROUNDPLOT` = 0 trong lúc in rồi trả lại giá trị cũ.
 
@@ -131,7 +131,11 @@ Yêu cầu: Windows, Visual Studio 2019/2022 (workload ".NET desktop development
 
 1. Mở `src/DwgToDxf/DwgToDxf.csproj` bằng Visual Studio.
 2. Visual Studio tự tải gói NuGet `AutoCAD.NET 24.2.0` (AcCoreMgd, AcDbMgd, AcMgd). Các DLL này không được copy ra thư mục bin vì AutoCAD đã có sẵn.
-3. Chọn cấu hình `Release`, build. Kết quả trong `src/DwgToDxf/bin/Release/net48/`: `DwgToDxf.dll` và file tự nạp `AutocadAddin.lsp`.
+3. Chọn cấu hình `Release`, build. Một lần build ra hai bản, mỗi bản gồm `DwgToDxf.dll` và file tự nạp `AutocadAddin.lsp`:
+   - `src/DwgToDxf/bin/Release/net48/`: cho **AutoCAD 2023** (.NET Framework 4.8, 64-bit).
+   - `src/DwgToDxf/bin/Release/net35/`: cho **AutoCAD 2010** (.NET Framework 3.5, chạy cả bản 32-bit và 64-bit).
+
+   Chép đúng bản theo phiên bản AutoCAD. Nạp bản `net48` vào AutoCAD 2010 sẽ báo lỗi `BadImageFormatException ... built by a runtime newer than the currently loaded runtime`.
 
 Hoặc dùng dòng lệnh: `dotnet build src/DwgToDxf/DwgToDxf.csproj -c Release`.
 
@@ -149,13 +153,14 @@ LISP chỉ định nghĩa vài lệnh nhỏ nên mở AutoCAD không chậm thê
 
 ### Cách thủ công
 
-1. Mở AutoCAD 2023, gõ `NETLOAD`, chọn `DwgToDxf.dll`.
+1. Mở AutoCAD, gõ `NETLOAD`, chọn `DwgToDxf.dll` (bản `net48` cho AutoCAD 2023, bản `net35` cho AutoCAD 2010).
 2. Gõ `CAIDATIN`, `INMODEL`, `INLAYOUT`, `INNHIEUFILE` hoặc `DWG2DXF`.
 
 Nếu AutoCAD cảnh báo bảo mật khi nạp DLL, thêm thư mục chứa DLL vào `TRUSTEDPATHS` (Options > Files > Trusted Locations).
 
 ## Ghi chú
 
-- Addin dùng .NET Framework 4.8 vì AutoCAD 2023 chạy trên nền này. AutoCAD 2025 trở đi chuyển sang .NET 8 và cần build lại với gói AutoCAD.NET tương ứng.
+- Bản `net48` dùng .NET Framework 4.8 vì AutoCAD 2023 chạy trên nền này. AutoCAD 2025 trở đi chuyển sang .NET 8 và cần build lại với gói AutoCAD.NET tương ứng.
+- Bản `net35` biên dịch với thư viện tham chiếu ObjectARX 2010 (gói NuGet `AutoCAD-2010.Net.Base`). Khác biệt so với bản 2023: DXF xuất tối đa bản 2010; trong `CAIDATIN`, nút "Chọn khung mẫu..." và "Chọn vùng..." tạm đóng hộp thoại để chọn trên bản vẽ rồi tự mở lại.
 - Phá block làm mất thông tin "đây là block gì". Nếu cần giữ block, trả lời `No` ở câu làm sạch.
 - File DWG đang được người khác mở vẫn đọc được (chế độ chia sẻ đọc). File hỏng hoặc có mật khẩu sẽ được ghi vào nhật ký lỗi và bỏ qua.

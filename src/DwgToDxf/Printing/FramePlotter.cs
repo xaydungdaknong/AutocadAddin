@@ -5,7 +5,11 @@ using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.PlottingServices;
+#if ACAD2010
+using AcApp = Autodesk.AutoCAD.ApplicationServices.Application;
+#else
 using AcApp = Autodesk.AutoCAD.ApplicationServices.Core.Application;
+#endif
 
 namespace DwgToDxf.Printing
 {
@@ -24,6 +28,12 @@ namespace DwgToDxf.Printing
     /// </summary>
     public static class FramePlotter
     {
+        private sealed class PageSettings
+        {
+            public Layout Layout;
+            public PlotSettings Settings;
+        }
+
         public const string PdfDevice = "DWG To PDF.pc3";
 
         /// <param name="outputFile">File đầu ra khi máy in chỉ in ra file. Null: gửi tới máy in.</param>
@@ -44,13 +54,13 @@ namespace DwgToDxf.Printing
                 using (var tr = db.TransactionManager.StartTransaction())
                 {
                     var modelToDcs = ModelWorldToDcs(tr, db);
-                    var settings = new List<(Layout layout, PlotSettings ps)>();
+                    var settings = new List<PageSettings>();
                     try
                     {
                         foreach (var page in pages)
                         {
                             var layout = (Layout)tr.GetObject(page.LayoutId, OpenMode.ForRead);
-                            settings.Add((layout, Settings(layout, profile, page.Frame, modelToDcs)));
+                            settings.Add(new PageSettings { Layout = layout, Settings = Settings(layout, profile, page.Frame, modelToDcs) });
                         }
                         var done = Run(settings, outputFile, doc.Name);
                         tr.Commit();
@@ -58,7 +68,7 @@ namespace DwgToDxf.Printing
                     }
                     finally
                     {
-                        foreach (var s in settings) s.ps.Dispose();
+                        foreach (var s in settings) s.Settings.Dispose();
                     }
                 }
             }
@@ -107,15 +117,24 @@ namespace DwgToDxf.Printing
 
             psv.SetPlotCentered(ps, true);
 
-            // Xoay giấy cho cùng chiều với khung (ngang/đứng). In cả layout thì giữ hướng của page setup.
-            if (frame != null)
+            // Tự xoay giấy cho cùng chiều với vùng in: khung ngang in giấy ngang, khung dọc in giấy dọc.
+            // In cả bản vẽ trong Model thì xét theo extents; in cả layout thì giữ hướng của page setup.
+            var shape = frame ?? (layout.ModelType ? ModelExtents(layout.Database) : null);
+            if (shape != null)
             {
                 var paper = ps.PlotPaperSize;
                 var paperLandscape = paper.X >= paper.Y;
-                var frameLandscape = frame.Width >= frame.Height;
+                var frameLandscape = shape.Width >= shape.Height;
                 psv.SetPlotRotation(ps, paperLandscape == frameLandscape ? PlotRotation.Degrees000 : PlotRotation.Degrees090);
             }
             return ps;
+        }
+
+        /// <summary>Extents của Model, hoặc null nếu bản vẽ trống.</summary>
+        private static Frame ModelExtents(Database db)
+        {
+            var f = new Frame { MinX = db.Extmin.X, MinY = db.Extmin.Y, MaxX = db.Extmax.X, MaxY = db.Extmax.Y };
+            return f.Width > 0 && f.Height > 0 && f.Width < 1e19 ? f : null;
         }
 
         /// <summary>Khổ giấy đã chọn nếu máy in có, nếu không thì ưu tiên A3 (full bleed).</summary>
@@ -155,7 +174,7 @@ namespace DwgToDxf.Printing
             return new Extents2d(pts.Min(p => p.X), pts.Min(p => p.Y), pts.Max(p => p.X), pts.Max(p => p.Y));
         }
 
-        private static int Run(List<(Layout layout, PlotSettings ps)> pages, string outputFile, string docName)
+        private static int Run(List<PageSettings> pages, string outputFile, string docName)
         {
             var count = pages.Count;
             using (var pe = PlotFactory.CreatePublishEngine())
@@ -175,7 +194,7 @@ namespace DwgToDxf.Printing
 
                 for (var i = 0; i < count; i++)
                 {
-                    using (var pi = new PlotInfo { Layout = pages[i].layout.ObjectId, OverrideSettings = pages[i].ps })
+                    using (var pi = new PlotInfo { Layout = pages[i].Layout.ObjectId, OverrideSettings = pages[i].Settings })
                     using (var piv = new PlotInfoValidator { MediaMatchingPolicy = MatchingPolicy.MatchEnabled })
                     using (var ppi = new PlotPageInfo())
                     {

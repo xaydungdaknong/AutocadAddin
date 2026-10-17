@@ -6,7 +6,11 @@ using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
+#if ACAD2010
+using AcApp = Autodesk.AutoCAD.ApplicationServices.Application;
+#else
 using AcApp = Autodesk.AutoCAD.ApplicationServices.Core.Application;
+#endif
 using WinForms = System.Windows.Forms;
 
 [assembly: CommandClass(typeof(DwgToDxf.Printing.PrintCommands))]
@@ -67,14 +71,21 @@ namespace DwgToDxf.Printing
         private static void ShowSetup()
         {
             var doc = AcApp.DocumentManager.MdiActiveDocument;
-            PrintSetupForm.Mode mode = PrintSetupForm.Mode.Setup;
             SetupAction action;
-            using (var ps = CurrentPageSetup(doc.Database))
-            using (var form = new PrintSetupForm(mode, ps, doc.Database.PlotStyleMode))
+            while (true)
             {
-                if (Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(form) != WinForms.DialogResult.OK) return;
-                ProfileStore.Current = form.Result;
-                action = form.Action;
+                using (var ps = CurrentPageSetup(doc.Database))
+                using (var form = new PrintSetupForm(PrintSetupForm.Mode.Setup, ps, doc.Database.PlotStyleMode))
+                {
+                    if (Autodesk.AutoCAD.ApplicationServices.Application.ShowModalDialog(form) != WinForms.DialogResult.OK) return;
+                    ProfileStore.Current = form.Result;
+                    action = form.Action;
+                }
+
+                // Bản AutoCAD 2010: hộp thoại đóng lại để chọn trên bản vẽ, chọn xong mở lại.
+                if (action == SetupAction.PickFrame) PrintSetupForm.PickFrameOnDrawing(ProfileStore.Current);
+                else if (action == SetupAction.PickWindow) PrintSetupForm.PickWindowOnDrawing(ProfileStore.Current);
+                else break;
             }
 
             switch (action)
@@ -151,9 +162,9 @@ namespace DwgToDxf.Printing
             var dflt = profile.HasArea ? "CauHinh" : inLayout ? "ToanBo" : null;
 
             var peo = new PromptEntityOptions(
-                "\nChọn một khung mẫu (block hoặc polyline chữ nhật) hoặc [" + string.Join("/", keywords) + "]" +
+                "\nChọn một khung mẫu (block hoặc polyline chữ nhật) hoặc [" + string.Join("/", keywords.ToArray()) + "]" +
                 (dflt != null ? " <" + dflt + ">" : "") + ": ",
-                string.Join(" ", keywords));
+                string.Join(" ", keywords.ToArray()));
             if (dflt != null)
             {
                 peo.Keywords.Default = dflt;

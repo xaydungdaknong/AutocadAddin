@@ -5,7 +5,11 @@ using System.Linq;
 using System.Text;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
+#if ACAD2010
+using AcApp = Autodesk.AutoCAD.ApplicationServices.Application;
+#else
 using AcApp = Autodesk.AutoCAD.ApplicationServices.Core.Application;
+#endif
 
 namespace DwgToDxf.Printing
 {
@@ -27,7 +31,7 @@ namespace DwgToDxf.Printing
             if (p.Area == AreaMode.Frame && !p.HasFrameRule)
                 return "Cấu hình in chưa có khung mẫu. Mở CAIDATIN, bấm \"Chọn khung mẫu...\".";
 
-            var files = Directory.EnumerateFiles(p.BatchFolder, "*.dwg",
+            var files = Directory.GetFiles(p.BatchFolder, "*.dwg",
                     p.BatchSubfolders ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly)
                 .Where(f => string.Equals(Path.GetExtension(f), ".dwg", StringComparison.OrdinalIgnoreCase))
                 .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)

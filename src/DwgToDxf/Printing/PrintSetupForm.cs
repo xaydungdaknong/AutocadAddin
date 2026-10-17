@@ -5,7 +5,11 @@ using System.Linq;
 using System.Windows.Forms;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Geometry;
+#if ACAD2010
+using AcApp = Autodesk.AutoCAD.ApplicationServices.Application;
+#else
 using AcApp = Autodesk.AutoCAD.ApplicationServices.Core.Application;
+#endif
 using OpenMode = Autodesk.AutoCAD.DatabaseServices.OpenMode;
 using PlotSettings = Autodesk.AutoCAD.DatabaseServices.PlotSettings;
 using PlotSettingsValidator = Autodesk.AutoCAD.DatabaseServices.PlotSettingsValidator;
@@ -19,6 +23,10 @@ namespace DwgToDxf.Printing
         PrintModel,
         PrintLayout,
         Batch,
+
+        /// <summary>Chỉ dùng ở bản AutoCAD 2010: đóng hộp thoại để chọn trên bản vẽ rồi mở lại.</summary>
+        PickFrame,
+        PickWindow,
     }
 
     /// <summary>
@@ -301,7 +309,7 @@ namespace DwgToDxf.Printing
         private PrintProfile ReadProfile()
         {
             var p = _profile.Clone();
-            p.Name = string.IsNullOrWhiteSpace(_profileName.Text) ? "Mặc định" : _profileName.Text.Trim();
+            p.Name = Compat.IsBlank(_profileName.Text) ? "Mặc định" : _profileName.Text.Trim();
 
             if (_mode == Mode.Setup)
             {
@@ -403,56 +411,77 @@ namespace DwgToDxf.Printing
 
         // ---------- chọn khung mẫu / vùng trên bản vẽ ----------
 
-        private void PickFrame()
+        private void PickFrame() => Pick(SetupAction.PickFrame);
+
+        private void PickWindow() => Pick(SetupAction.PickWindow);
+
+        private void Pick(SetupAction what)
+        {
+#if ACAD2010
+            // AutoCAD 2010 không cho tạm ẩn hộp thoại WinForms để chọn trên bản vẽ:
+            // đóng hộp thoại, lệnh CAIDATIN chọn xong sẽ mở lại với các giá trị đang sửa.
+            var p = ReadProfile();
+            if (p == null) return;
+            Result = p;
+            Action = what;
+            DialogResult = DialogResult.OK;
+            Close();
+#else
+            var ed = AcApp.DocumentManager.MdiActiveDocument.Editor;
+            bool picked;
+            using (ed.StartUserInteraction(Handle))
+                picked = what == SetupAction.PickFrame ? PickFrameOnDrawing(_profile) : PickWindowOnDrawing(_profile);
+            if (!picked) return;
+            (what == SetupAction.PickFrame ? _areaFrame : _areaWindow).Checked = true;
+            UpdateAreaLabels();
+#endif
+        }
+
+        /// <summary>Chọn khung mẫu trên bản vẽ, ghi quy tắc nhận diện khung vào cấu hình.</summary>
+        public static bool PickFrameOnDrawing(PrintProfile profile)
         {
             var doc = AcApp.DocumentManager.MdiActiveDocument;
             var ed = doc.Editor;
-            using (ed.StartUserInteraction(Handle))
+            var peo = new PromptEntityOptions("\nChọn một khung mẫu (block hoặc polyline chữ nhật): ");
+            while (true)
             {
-                var peo = new PromptEntityOptions("\nChọn một khung mẫu (block hoặc polyline chữ nhật): ");
-                while (true)
+                var r = ed.GetEntity(peo);
+                if (r.Status != PromptStatus.OK) return false;
+                using (var tr = doc.Database.TransactionManager.StartTransaction())
                 {
-                    var r = ed.GetEntity(peo);
-                    if (r.Status != PromptStatus.OK) return;
-                    using (var tr = doc.Database.TransactionManager.StartTransaction())
+                    var why = FrameFinder.CheckSample(tr, r.ObjectId);
+                    if (why == null)
                     {
-                        var why = FrameFinder.CheckSample(tr, r.ObjectId);
-                        if (why == null)
-                        {
-                            FrameFinder.RuleFromSample(tr, r.ObjectId, out var block, out var layer);
-                            _profile.FrameBlock = block;
-                            _profile.FrameLayer = layer;
-                            tr.Commit();
-                            break;
-                        }
-                        ed.WriteMessage("\n" + why);
+                        FrameFinder.RuleFromSample(tr, r.ObjectId, out var block, out var layer);
                         tr.Commit();
+                        profile.Area = AreaMode.Frame;
+                        profile.FrameBlock = block;
+                        profile.FrameLayer = layer;
+                        return true;
                     }
+                    ed.WriteMessage("\n" + why);
+                    tr.Commit();
                 }
             }
-            _areaFrame.Checked = true;
-            UpdateAreaLabels();
         }
 
-        private void PickWindow()
+        /// <summary>Quét một vùng chữ nhật trên bản vẽ, ghi tọa độ vào cấu hình.</summary>
+        public static bool PickWindowOnDrawing(PrintProfile profile)
         {
             var ed = AcApp.DocumentManager.MdiActiveDocument.Editor;
-            using (ed.StartUserInteraction(Handle))
-            {
-                var a = ed.GetPoint("\nGóc thứ nhất của vùng in: ");
-                if (a.Status != PromptStatus.OK) return;
-                var b = ed.GetCorner("\nGóc đối diện: ", a.Value);
-                if (b.Status != PromptStatus.OK) return;
+            var a = ed.GetPoint("\nGóc thứ nhất của vùng in: ");
+            if (a.Status != PromptStatus.OK) return false;
+            var b = ed.GetCorner("\nGóc đối diện: ", a.Value);
+            if (b.Status != PromptStatus.OK) return false;
 
-                var ucs = ed.CurrentUserCoordinateSystem;
-                Point3d p1 = a.Value.TransformBy(ucs), p2 = b.Value.TransformBy(ucs);
-                _profile.WindowMinX = Math.Min(p1.X, p2.X);
-                _profile.WindowMinY = Math.Min(p1.Y, p2.Y);
-                _profile.WindowMaxX = Math.Max(p1.X, p2.X);
-                _profile.WindowMaxY = Math.Max(p1.Y, p2.Y);
-            }
-            _areaWindow.Checked = true;
-            UpdateAreaLabels();
+            var ucs = ed.CurrentUserCoordinateSystem;
+            Point3d p1 = a.Value.TransformBy(ucs), p2 = b.Value.TransformBy(ucs);
+            profile.Area = AreaMode.Window;
+            profile.WindowMinX = Math.Min(p1.X, p2.X);
+            profile.WindowMinY = Math.Min(p1.Y, p2.Y);
+            profile.WindowMaxX = Math.Max(p1.X, p2.X);
+            profile.WindowMaxY = Math.Max(p1.Y, p2.Y);
+            return true;
         }
 
         // ---------- máy in ----------

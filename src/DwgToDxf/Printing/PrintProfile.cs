@@ -140,7 +140,7 @@ namespace DwgToDxf.Printing
         /// <summary>Đọc tỉ lệ dạng "1:100", "1/100" hoặc "100". Trả về mẫu số, hoặc 0 nếu sai.</summary>
         public static double ParseScale(string text)
         {
-            if (string.IsNullOrWhiteSpace(text)) return 0;
+            if (Compat.IsBlank(text)) return 0;
             var parts = text.Split(new[] { ':', '/' }, StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length == 1 && TryNumber(parts[0], out var n) && n > 0) return n;
             if (parts.Length == 2 && TryNumber(parts[0], out var a) && TryNumber(parts[1], out var b) && a > 0 && b > 0) return b / a;
@@ -166,8 +166,8 @@ namespace DwgToDxf.Printing
     {
         private static PrintProfile _current;
 
-        public static string FilePath => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AutocadAddin", "CauHinhIn.xml");
+        public static string FilePath => Path.Combine(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AutocadAddin"), "CauHinhIn.xml");
 
         public static PrintProfile Current
         {
