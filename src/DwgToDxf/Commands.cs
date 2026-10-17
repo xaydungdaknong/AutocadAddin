@@ -2,7 +2,11 @@ using System.IO;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
+#if ACAD2010
+using AcApp = Autodesk.AutoCAD.ApplicationServices.Application;
+#else
 using AcApp = Autodesk.AutoCAD.ApplicationServices.Core.Application;
+#endif
 using WinForms = System.Windows.Forms;
 
 [assembly: CommandClass(typeof(DwgToDxf.Commands))]
@@ -82,7 +86,7 @@ namespace DwgToDxf
         {
             includeSub = false;
             useOtherFolder = false;
-            version = Autodesk.AutoCAD.DatabaseServices.DwgVersion.AC1032;
+            version = DxfConverter.DefaultVersion;
             clean = true;
 
             var sub = new PromptKeywordOptions("\nGồm cả thư mục con? [Yes/No] <No>: ", "Yes No");
@@ -100,9 +104,15 @@ namespace DwgToDxf
             useOtherFolder = r2.StringResult == "Other";
 
             var ver = new PromptKeywordOptions(
+#if ACAD2010
+                "\nPhiên bản DXF [V2010/V2007/V2004/V2000/R12] <V2010>: ",
+                "V2010 V2007 V2004 V2000 R12");
+            ver.Keywords.Default = "V2010";
+#else
                 "\nPhiên bản DXF [V2018/V2013/V2010/V2007/V2004/V2000/R12] <V2018>: ",
                 "V2018 V2013 V2010 V2007 V2004 V2000 R12");
             ver.Keywords.Default = "V2018";
+#endif
             ver.AllowNone = true;
             var r3 = ed.GetKeywords(ver);
             if (r3.Status != PromptStatus.OK && r3.Status != PromptStatus.None) return false;

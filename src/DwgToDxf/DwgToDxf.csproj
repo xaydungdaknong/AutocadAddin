@@ -1,27 +1,56 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- AutoCAD 2023 (R24.2) chạy trên .NET Framework 4.8 -->
-    <TargetFramework>net48</TargetFramework>
+    <!--
+      net48: AutoCAD 2023 (R24.2), .NET Framework 4.8, 64-bit.
+      net35: AutoCAD 2010 (R18.0), .NET Framework 3.5 (CLR 2), chạy được cả bản 32-bit và 64-bit.
+      Hai bản dùng chung mã nguồn; chỗ khác API được rẽ nhánh bằng ký hiệu ACAD2010.
+    -->
+    <TargetFrameworks>net48;net35</TargetFrameworks>
     <OutputType>Library</OutputType>
     <AssemblyName>DwgToDxf</AssemblyName>
     <RootNamespace>DwgToDxf</RootNamespace>
-    <PlatformTarget>x64</PlatformTarget>
     <LangVersion>latest</LangVersion>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <Version>1.0.0</Version>
-    <Product>DWG to DXF batch converter for AutoCAD 2023</Product>
+    <Product>AutocadAddin: DWG2DXF and frame printing for AutoCAD</Product>
   </PropertyGroup>
 
-  <ItemGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net48'">
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net35'">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DefineConstants>$(DefineConstants);ACAD2010</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
     <!-- AcCoreMgd / AcDbMgd / AcMgd. ExcludeAssets=runtime: không copy DLL của AutoCAD ra thư mục bin (Copy Local = false). -->
     <PackageReference Include="AutoCAD.NET" Version="24.2.0">
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
   </ItemGroup>
 
+  <ItemGroup Condition="'$(TargetFramework)' == 'net35'">
+    <!-- AcDbMgd / AcMgd của ObjectARX 2010 (chỉ để biên dịch, không copy ra thư mục bin). -->
+    <PackageReference Include="AutoCAD-2010.Net.Base" Version="1.0.0">
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
   <ItemGroup>
     <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
+    <!-- Editor.StartUserInteraction có overload nhận cửa sổ WPF. -->
+    <Reference Include="PresentationFramework" />
+    <Reference Include="PresentationCore" />
+    <Reference Include="WindowsBase" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- File LISP tự nạp DLL, chép ra cạnh DwgToDxf.dll. -->
+    <None Include="AutocadAddin.lsp" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

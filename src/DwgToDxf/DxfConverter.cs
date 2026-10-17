@@ -6,7 +6,11 @@ using System.Text;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Runtime;
+#if ACAD2010
+using AcApp = Autodesk.AutoCAD.ApplicationServices.Application;
+#else
 using AcApp = Autodesk.AutoCAD.ApplicationServices.Core.Application;
+#endif
 
 namespace DwgToDxf
 {
@@ -20,7 +24,7 @@ namespace DwgToDxf
 
         public bool IncludeSubfolders { get; set; }
 
-        public DwgVersion Version { get; set; } = DwgVersion.AC1032; // DXF 2018
+        public DwgVersion Version { get; set; } = DxfConverter.DefaultVersion;
 
         /// <summary>Audit, bind xref, phá block, xóa rác, purge trước khi xuất.</summary>
         public bool Clean { get; set; } = true;
@@ -44,26 +48,33 @@ namespace DwgToDxf
     /// </summary>
     public static class DxfConverter
     {
+#if ACAD2010
+        /// <summary>AutoCAD 2010 ghi được tối đa DXF 2010.</summary>
+        public const DwgVersion DefaultVersion = DwgVersion.AC1024;
+#else
+        public const DwgVersion DefaultVersion = DwgVersion.AC1032; // DXF 2018
+#endif
+
         public static ConvertResult Run(ConvertOptions options)
         {
             var result = new ConvertResult();
             var ed = AcApp.DocumentManager.MdiActiveDocument?.Editor;
 
             var search = options.IncludeSubfolders ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-            var files = Directory.EnumerateFiles(options.SourceFolder, "*.dwg", search)
+            var files = Directory.GetFiles(options.SourceFolder, "*.dwg", search)
                 .Where(f => string.Equals(Path.GetExtension(f), ".dwg", StringComparison.OrdinalIgnoreCase))
                 .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
                 .ToList();
             result.Total = files.Count;
 
-            var logFolder = string.IsNullOrWhiteSpace(options.OutputFolder) ? options.SourceFolder : options.OutputFolder;
+            var logFolder = Compat.IsBlank(options.OutputFolder) ? options.SourceFolder : options.OutputFolder;
             Directory.CreateDirectory(logFolder);
             result.LogFile = Path.Combine(logFolder, "DWG2DXF_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".log");
 
             var log = new StringBuilder();
             log.AppendLine("DWG -> DXF  " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
             log.AppendLine("Nguon: " + options.SourceFolder + (options.IncludeSubfolders ? " (gom thu muc con)" : ""));
-            log.AppendLine("Dich : " + (string.IsNullOrWhiteSpace(options.OutputFolder) ? "(cung thu muc voi file goc)" : options.OutputFolder));
+            log.AppendLine("Dich : " + (Compat.IsBlank(options.OutputFolder) ? "(cung thu muc voi file goc)" : options.OutputFolder));
             log.AppendLine("Phien ban DXF: " + VersionName(options.Version));
             log.AppendLine("Lam sach truoc: " + (options.Clean ? "co" : "khong"));
             log.AppendLine("So file: " + files.Count);
@@ -148,12 +159,12 @@ namespace DwgToDxf
         private static string GetOutputPath(string src, ConvertOptions options)
         {
             var name = Path.GetFileNameWithoutExtension(src) + ".dxf";
-            if (string.IsNullOrWhiteSpace(options.OutputFolder))
+            if (Compat.IsBlank(options.OutputFolder))
                 return Path.Combine(Path.GetDirectoryName(src), name);
 
             // Giữ nguyên cấu trúc thư mục con bên trong thư mục đích.
             var relativeDir = GetRelativePath(options.SourceFolder, Path.GetDirectoryName(src));
-            return Path.Combine(options.OutputFolder, relativeDir, name);
+            return Path.Combine(Path.Combine(options.OutputFolder, relativeDir), name);
         }
 
         private static string GetRelativePath(string root, string path)
@@ -169,8 +180,10 @@ namespace DwgToDxf
         {
             switch (v)
             {
+#if !ACAD2010
                 case DwgVersion.AC1032: return "2018";
                 case DwgVersion.AC1027: return "2013";
+#endif
                 case DwgVersion.AC1024: return "2010";
                 case DwgVersion.AC1021: return "2007";
                 case DwgVersion.AC1800: return "2004";
@@ -184,13 +197,15 @@ namespace DwgToDxf
         {
             switch ((keyword ?? string.Empty).ToUpperInvariant().TrimStart('V'))
             {
+#if !ACAD2010
                 case "2013": return DwgVersion.AC1027;
+#endif
                 case "2010": return DwgVersion.AC1024;
                 case "2007": return DwgVersion.AC1021;
                 case "2004": return DwgVersion.AC1800;
                 case "2000": return DwgVersion.AC1015;
                 case "R12": return DwgVersion.AC1009;
-                default: return DwgVersion.AC1032;
+                default: return DefaultVersion;
             }
         }
     }
