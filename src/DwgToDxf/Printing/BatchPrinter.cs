@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
@@ -46,6 +47,7 @@ namespace DwgToDxf.Printing
             log.AppendLine();
 
             int ok = 0, failed = 0, pagesTotal = 0;
+            var printed = new List<string>();
             var cancelled = false;
             for (var i = 0; i < files.Count && !cancelled; i++)
             {
@@ -68,6 +70,7 @@ namespace DwgToDxf.Printing
                     {
                         ok++;
                         pagesTotal += pages;
+                        if (output != null) printed.Add(output);
                         log.AppendLine("OK    " + file + " | " + pages + " trang" + (output != null ? " -> " + output : ""));
                     }
                 }
@@ -81,6 +84,25 @@ namespace DwgToDxf.Printing
 
             var summary = string.Format("Đã in {0}/{1} bản vẽ, {2} trang.{3}{4}", ok, files.Count, pagesTotal,
                 failed > 0 ? " " + failed + " file lỗi." : "", cancelled ? " Đã dừng theo yêu cầu." : "");
+
+            if (p.BatchMerge && !cancelled && printed.Count > 0 && string.Equals(ext, "pdf", StringComparison.OrdinalIgnoreCase))
+            {
+                var mergeFolder = !string.IsNullOrEmpty(p.OutputFolder) ? p.OutputFolder : p.BatchFolder;
+                var merged = Path.Combine(mergeFolder, new DirectoryInfo(p.BatchFolder).Name + "_TongHop.pdf");
+                say?.Invoke("\nĐang gộp " + printed.Count + " file PDF...");
+                try
+                {
+                    var n = MergePdf(printed, merged);
+                    summary += " Đã gộp " + n + " trang vào " + merged + ".";
+                    log.AppendLine("GỘP  " + merged + " | " + n + " trang");
+                }
+                catch (System.Exception ex)
+                {
+                    summary += " Không gộp được PDF: " + ex.Message;
+                    log.AppendLine("LỖI GỘP " + merged + " | " + ex.Message);
+                }
+            }
+
             log.AppendLine();
             log.AppendLine(summary);
 
@@ -97,6 +119,29 @@ namespace DwgToDxf.Printing
                 // Không ghi được nhật ký (thư mục chỉ đọc): vẫn báo kết quả ở dòng lệnh.
             }
             return summary;
+        }
+
+        /// <summary>
+        /// Gộp các file PDF theo thứ tự thành một file. Để riêng một hàm để PdfSharp.dll chỉ được nạp khi cần gộp.
+        /// </summary>
+        /// <returns>Số trang của file gộp.</returns>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static int MergePdf(IList<string> files, string target)
+        {
+            using (var output = new PdfSharp.Pdf.PdfDocument())
+            {
+                foreach (var file in files)
+                {
+                    if (string.Equals(Path.GetFullPath(file), Path.GetFullPath(target), StringComparison.OrdinalIgnoreCase)) continue;
+                    using (var input = PdfSharp.Pdf.IO.PdfReader.Open(file, PdfSharp.Pdf.IO.PdfDocumentOpenMode.Import))
+                        foreach (PdfSharp.Pdf.PdfPage page in input.Pages)
+                            output.AddPage(page);
+                }
+                if (output.PageCount == 0) return 0;
+                Directory.CreateDirectory(Path.GetDirectoryName(target));
+                output.Save(target);
+                return output.PageCount;
+            }
         }
 
         /// <summary>

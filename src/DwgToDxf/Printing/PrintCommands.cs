@@ -68,6 +68,45 @@ namespace DwgToDxf.Printing
             PrintCurrentSpace(doc, inLayout: true);
         }
 
+        /// <summary>VEVUNGIN: vẽ vùng in (hình chữ nhật trên layer VUNG_IN, không in ra giấy) để lệnh in tự nhận.</summary>
+        [CommandMethod("VEVUNGIN", CommandFlags.Modal)]
+        public void DrawPrintAreas() => SheetTools.DrawAreas(AcApp.DocumentManager.MdiActiveDocument);
+
+        /// <summary>DANHSOBV: đánh số hiệu bản vẽ vào khung tên theo thứ tự in.</summary>
+        [CommandMethod("DANHSOBV", CommandFlags.Modal)]
+        public void NumberSheets() => RunTool(Tool.Number);
+
+        /// <summary>DANHMUCBV: lập bảng danh mục bản vẽ theo thứ tự in.</summary>
+        [CommandMethod("DANHMUCBV", CommandFlags.Modal)]
+        public void ListSheets() => RunTool(Tool.List);
+
+        private enum Tool { Print, Number, List }
+
+        /// <summary>Chọn khung trong không gian hiện hành, xếp thứ tự, rồi đánh số hoặc lập danh mục.</summary>
+        private static void RunTool(Tool tool)
+        {
+            var doc = AcApp.DocumentManager.MdiActiveDocument;
+            var db = doc.Database;
+            if (Convert.ToInt16(AcApp.GetSystemVariable("TILEMODE")) == 0 && Convert.ToInt16(AcApp.GetSystemVariable("CVPORT")) != 1)
+                doc.Editor.SwitchToPaperSpace();
+
+            ObjectId layoutId, spaceId = db.CurrentSpaceId;
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                layoutId = ((BlockTableRecord)tr.GetObject(spaceId, OpenMode.ForRead)).LayoutId;
+                tr.Commit();
+            }
+
+            var area = AskArea(doc, spaceId, false, ProfileStore.Current, allowWhole: false);
+            if (area?.Frames == null) return;
+            if (area.Frames.Count == 0)
+            {
+                doc.Editor.WriteMessage("\nKhông tìm thấy khung nào.");
+                return;
+            }
+            Arrange(doc, layoutId, area.Frames, tool);
+        }
+
         private static void ShowSetup()
         {
             var doc = AcApp.DocumentManager.MdiActiveDocument;
@@ -136,7 +175,7 @@ namespace DwgToDxf.Printing
                 frames = null;
             }
 
-            ArrangeAndPlot(doc, layoutId, frames);
+            Arrange(doc, layoutId, frames, Tool.Print);
         }
 
         private class AreaResult
@@ -149,7 +188,7 @@ namespace DwgToDxf.Printing
         }
 
         /// <summary>Hỏi vùng in: chọn khung mẫu, dùng cấu hình, quét vùng, hoặc in toàn bộ.</summary>
-        private static AreaResult AskArea(Document doc, ObjectId spaceId, bool inLayout, PrintProfile profile)
+        private static AreaResult AskArea(Document doc, ObjectId spaceId, bool inLayout, PrintProfile profile, bool allowWhole = true)
         {
             var ed = doc.Editor;
             ed.WriteMessage("\nCấu hình in \"{0}\": {1}, máy in {2}.", profile.Name, profile.AreaDescription(),
@@ -158,8 +197,8 @@ namespace DwgToDxf.Printing
             var keywords = new List<string>();
             if (profile.HasArea) keywords.Add("CauHinh");
             keywords.Add("Vung");
-            keywords.Add("ToanBo");
-            var dflt = profile.HasArea ? "CauHinh" : inLayout ? "ToanBo" : null;
+            if (allowWhole) keywords.Add("ToanBo");
+            var dflt = profile.HasArea && (allowWhole || profile.Area != AreaMode.Whole) ? "CauHinh" : inLayout && allowWhole ? "ToanBo" : null;
 
             var peo = new PromptEntityOptions(
                 "\nChọn một khung mẫu (block hoặc polyline chữ nhật) hoặc [" + string.Join("/", keywords.ToArray()) + "]" +
@@ -200,7 +239,13 @@ namespace DwgToDxf.Printing
 
                 switch (kw)
                 {
-                    case "CauHinh": return FromProfile(doc, spaceId, profile, askRegion: profile.Area == AreaMode.Frame);
+                    case "CauHinh":
+                        if (!allowWhole && profile.Area == AreaMode.Whole)
+                        {
+                            ed.WriteMessage("\nCấu hình đang in toàn bộ, hãy chọn khung mẫu hoặc quét vùng.");
+                            continue;
+                        }
+                        return FromProfile(doc, spaceId, profile, askRegion: profile.Area == AreaMode.Frame);
                     case "Vung": return PickWindows(doc, profile);
                     case "ToanBo": return new AreaResult();
                     default: return null;
@@ -286,12 +331,34 @@ namespace DwgToDxf.Printing
 
         // ---------- thứ tự và in ----------
 
-        /// <summary>Hiện số thứ tự ảo, cho đổi thứ tự (hàng, cột, bấm chọn, sửa tay), rồi in.</summary>
+        /// <summary>
+        /// Hiện số thứ tự ảo, cho đổi thứ tự (hàng, hàng từ dưới lên, cột, bấm chọn, sửa tay),
+        /// rồi in, đánh số bản vẽ hoặc lập danh mục theo thứ tự đó.
+        /// </summary>
         /// <param name="frames">Null: in cả layout / cả bản vẽ.</param>
-        private static void ArrangeAndPlot(Document doc, ObjectId layoutId, List<Frame> frames)
+        private static void Arrange(Document doc, ObjectId layoutId, List<Frame> frames, Tool tool)
         {
             var ed = doc.Editor;
             var order = frames == null ? null : new List<Frame>(frames);
+            ObjectId spaceId;
+            using (var tr = doc.Database.TransactionManager.StartTransaction())
+            {
+                spaceId = ((Layout)tr.GetObject(layoutId, OpenMode.ForRead)).BlockTableRecordId;
+                tr.Commit();
+            }
+
+            PromptKeywordOptions pko;
+            if (order == null)
+                pko = new PromptKeywordOptions("\nIn toàn bộ [CaiDat/In/Thoat] <In>: ", "CaiDat In Thoat");
+            else if (tool == Tool.Print)
+                pko = new PromptKeywordOptions("\nThứ tự in [Hang/Duoi/Cot/Bam/Sua/DanhSo/DanhMuc/CaiDat/In/Thoat] <In>: ",
+                    "Hang Duoi Cot Bam Sua DanhSo DanhMuc CaiDat In Thoat");
+            else
+                pko = new PromptKeywordOptions("\nThứ tự bản vẽ [Hang/Duoi/Cot/Bam/Sua/OK/Thoat] <OK>: ",
+                    "Hang Duoi Cot Bam Sua OK Thoat");
+            var finish = tool == Tool.Print ? "In" : "OK";
+            pko.Keywords.Default = finish;
+            pko.AllowNone = true;
 
             using (var overlay = new FrameNumberOverlay(doc.Database))
             {
@@ -303,20 +370,17 @@ namespace DwgToDxf.Printing
                         ed.UpdateScreen();
                     }
 
-                    var pko = order != null
-                        ? new PromptKeywordOptions("\nThứ tự in [Hang/Cot/Bam/Sua/CaiDat/In/Thoat] <In>: ",
-                            "Hang Cot Bam Sua CaiDat In Thoat")
-                        : new PromptKeywordOptions("\nIn toàn bộ [CaiDat/In/Thoat] <In>: ", "CaiDat In Thoat");
-                    pko.Keywords.Default = "In";
-                    pko.AllowNone = true;
                     var pr = ed.GetKeywords(pko);
                     if (pr.Status != PromptStatus.OK && pr.Status != PromptStatus.None) return;
 
-                    var kw = pr.Status == PromptStatus.None ? "In" : pr.StringResult;
+                    var kw = pr.Status == PromptStatus.None ? finish : pr.StringResult;
                     switch (kw)
                     {
                         case "Hang":
                             order = FrameOrder.ByRows(frames);
+                            break;
+                        case "Duoi":
+                            order = FrameOrder.ByRowsFromBottom(frames);
                             break;
                         case "Cot":
                             order = FrameOrder.ByColumns(frames);
@@ -328,7 +392,22 @@ namespace DwgToDxf.Printing
                         case "Sua":
                             if (!EditOrder(ed, overlay, frames, order)) return;
                             break;
+                        case "DanhSo":
+                            SheetTools.Number(doc, spaceId, order);
+                            break;
+                        case "DanhMuc":
+                            overlay.Clear();
+                            SheetTools.DrawList(doc, spaceId, order);
+                            break;
                         case "Thoat":
+                            return;
+                        case "OK":
+                            if (tool == Tool.Number) SheetTools.Number(doc, spaceId, order);
+                            else
+                            {
+                                overlay.Clear();
+                                SheetTools.DrawList(doc, spaceId, order);
+                            }
                             return;
                         case "CaiDat":
                             overlay.Clear();

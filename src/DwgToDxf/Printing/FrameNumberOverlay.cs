@@ -77,7 +77,7 @@ namespace DwgToDxf.Printing
             var text = new DBText();
             text.SetDatabaseDefaults(_db);
             text.TextString = number.ToString();
-            text.Height = Math.Min(f.Width, f.Height) * 0.3;
+            text.Height = Math.Min(f.Width, f.Height) * Math.Max(1, Math.Min(90, ProfileStore.Current.NumberSizePercent)) / 100.0;
             text.ColorIndex = NumberColor;
             text.Position = center;
             text.HorizontalMode = TextHorizontalMode.TextCenter;

@@ -31,8 +31,14 @@ namespace DwgToDxf.Printing
 
     public enum OrderMode
     {
+        /// <summary>Theo hàng, hàng trên cùng trước.</summary>
         Rows,
+
+        /// <summary>Theo cột, cột trái trước.</summary>
         Columns,
+
+        /// <summary>Theo hàng, hàng dưới cùng trước.</summary>
+        RowsFromBottom,
     }
 
     public enum BatchSpaces
@@ -76,6 +82,9 @@ namespace DwgToDxf.Printing
 
         public OrderMode Order { get; set; } = OrderMode.Rows;
 
+        /// <summary>Cỡ chữ số thứ tự ảo, tính theo % cạnh ngắn của khung.</summary>
+        public int NumberSizePercent { get; set; } = 30;
+
         // Đầu ra và in nhiều file
         /// <summary>Thư mục lưu file in (PDF...). Trống: cạnh bản vẽ.</summary>
         public string OutputFolder { get; set; }
@@ -83,6 +92,9 @@ namespace DwgToDxf.Printing
         public string BatchFolder { get; set; }
         public bool BatchSubfolders { get; set; }
         public BatchSpaces BatchSpaces { get; set; } = BatchSpaces.Layouts;
+
+        /// <summary>In nhiều file: gộp PDF của mọi bản vẽ thành một file tổng hợp.</summary>
+        public bool BatchMerge { get; set; }
 
         [XmlIgnore]
         public bool HasFrameRule => !string.IsNullOrEmpty(FrameBlock) || !string.IsNullOrEmpty(FrameLayer);

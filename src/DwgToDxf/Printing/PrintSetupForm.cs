@@ -72,6 +72,8 @@ namespace DwgToDxf.Printing
         // In nhiều file
         private readonly TextBox _batchFolder = new TextBox { Width = 300 };
         private readonly CheckBox _batchSub = new CheckBox { Text = "Gồm cả thư mục con", AutoSize = true };
+        private readonly CheckBox _batchMerge = new CheckBox { Text = "Gộp PDF của mọi bản vẽ thành một file tổng hợp", AutoSize = true };
+        private readonly NumericUpDown _numberSize = new NumericUpDown { Minimum = 5, Maximum = 90, Width = 60 };
         private readonly ComboBox _batchSpaces = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
 
         public SetupAction Action { get; private set; }
@@ -128,7 +130,18 @@ namespace DwgToDxf.Printing
                 area.SetColumnSpan(_areaWhole, 3);
                 area.Controls.Add(Caption("Thứ tự in:"));
                 area.Controls.Add(_order);
-                _order.Items.AddRange(new object[] { "Theo hàng (trái → phải, trên → dưới)", "Theo cột (trên → dưới, trái → phải)" });
+                area.SetColumnSpan(_order, 2);
+                // Thứ tự mục trùng thứ tự của OrderMode.
+                _order.Items.AddRange(new object[]
+                {
+                    "Theo hàng, từ trên xuống", "Theo cột, từ trái sang", "Theo hàng, từ dưới lên",
+                });
+                area.Controls.Add(Caption("Cỡ số thứ tự ảo:"));
+                var sizeRow = Row();
+                sizeRow.Controls.Add(_numberSize);
+                sizeRow.Controls.Add(Caption("% cạnh ngắn của khung"));
+                area.Controls.Add(sizeRow);
+                area.SetColumnSpan(sizeRow, 2);
                 root.Controls.Add(Group("Vùng in", area));
 
                 pickFrame.Click += (s, e) => PickFrame();
@@ -174,6 +187,8 @@ namespace DwgToDxf.Printing
                 batch.Controls.Add(_batchSub);
                 batch.Controls.Add(Caption("In trong:"));
                 batch.Controls.Add(_batchSpaces);
+                batch.Controls.Add(new Label());
+                batch.Controls.Add(_batchMerge);
                 _batchSpaces.Items.AddRange(new object[] { "Model", "Các layout", "Model và các layout" });
                 root.Controls.Add(Group("In nhiều file", batch));
                 browseBatch.Click += (s, e) => BrowseFolder(_batchFolder, "Chọn thư mục chứa các file DWG cần in");
@@ -273,7 +288,8 @@ namespace DwgToDxf.Printing
             _areaWindow.Checked = p.Area == AreaMode.Window;
             _areaWhole.Checked = p.Area == AreaMode.Whole;
             UpdateAreaLabels();
-            if (_order.Items.Count > 0) _order.SelectedIndex = p.Order == OrderMode.Columns ? 1 : 0;
+            if (_order.Items.Count > 0) _order.SelectedIndex = Math.Min((int)p.Order, _order.Items.Count - 1);
+            _numberSize.Value = Math.Max(_numberSize.Minimum, Math.Min(_numberSize.Maximum, p.NumberSizePercent));
 
             var devices = _device.Items.Cast<string>().ToList();
             var device = new[] { p.Device, _ps.PlotConfigurationName, FramePlotter.PdfDevice }
@@ -292,6 +308,7 @@ namespace DwgToDxf.Printing
             _outputFolder.Text = p.OutputFolder ?? "";
             _batchFolder.Text = p.BatchFolder ?? "";
             _batchSub.Checked = p.BatchSubfolders;
+            _batchMerge.Checked = p.BatchMerge;
             if (_batchSpaces.Items.Count > 0) _batchSpaces.SelectedIndex = (int)p.BatchSpaces;
         }
 
@@ -314,9 +331,11 @@ namespace DwgToDxf.Printing
             if (_mode == Mode.Setup)
             {
                 p.Area = _areaWindow.Checked ? AreaMode.Window : _areaWhole.Checked ? AreaMode.Whole : AreaMode.Frame;
-                p.Order = _order.SelectedIndex == 1 ? OrderMode.Columns : OrderMode.Rows;
+                p.Order = (OrderMode)Math.Max(0, _order.SelectedIndex);
+                p.NumberSizePercent = (int)_numberSize.Value;
                 p.BatchFolder = _batchFolder.Text.Trim().Trim('"');
                 p.BatchSubfolders = _batchSub.Checked;
+                p.BatchMerge = _batchMerge.Checked;
                 p.BatchSpaces = (BatchSpaces)Math.Max(0, _batchSpaces.SelectedIndex);
             }
 

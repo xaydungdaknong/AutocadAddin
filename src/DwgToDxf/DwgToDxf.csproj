@@ -14,6 +14,7 @@
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <Version>1.0.0</Version>
     <Product>AutocadAddin: DWG2DXF and frame printing for AutoCAD</Product>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(TargetFramework)' == 'net48'">
@@ -46,6 +47,11 @@
     <Reference Include="PresentationFramework" />
     <Reference Include="PresentationCore" />
     <Reference Include="WindowsBase" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Gộp các file PDF khi in nhiều file (PdfSharp, giấy phép MIT). PdfSharp.dll được chép ra cạnh DwgToDxf.dll. -->
+    <PackageReference Include="PdfSharp" Version="1.50.5147" />
   </ItemGroup>
 
   <ItemGroup>

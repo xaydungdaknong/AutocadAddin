@@ -63,6 +63,9 @@ Yes
 | `INLAYOUT` | In layout hiện hành. Layout chỉ có một khung giấy thì in cả layout; nhiều khung thì chọn khung như `INMODEL`. |
 | `INNHIEUFILE` | Giống `CAIDATIN`, dùng để in nhiều file: chọn thư mục ở mục "In nhiều file" rồi bấm **In nhiều file**. |
 | `INNHIEUFILECHAY` | In nhiều file ngay theo cấu hình đang dùng, không mở hộp thoại (dùng trong script). |
+| `VEVUNGIN` | Vẽ vùng in: các hình chữ nhật trên layer `VUNG_IN` (không in ra giấy), để lệnh in tự nhận ra khung. |
+| `DANHSOBV` | Đánh số hiệu bản vẽ vào khung tên theo thứ tự in (tiền tố, hậu tố, số bắt đầu, dạng `01/10`). |
+| `DANHMUCBV` | Lập bảng danh mục bản vẽ (STT, ký hiệu, tên bản vẽ) theo thứ tự in. |
 
 ### Quy trình gọn nhất
 
@@ -79,14 +82,15 @@ Hộp thoại gồm:
   - `Khung` + nút **Chọn khung mẫu...**: bấm vào một khung trên bản vẽ. Khung mẫu là block thì lấy mọi block cùng tên (kể cả dynamic block khác kích thước); là polyline chữ nhật kín thì lấy mọi polyline chữ nhật kín trên **cùng layer**. Khung nằm trọn trong khung khác (ô trong khung tên) tự được bỏ qua.
   - `Vùng` + nút **Chọn vùng...**: quét một hình chữ nhật. Tọa độ được lưu, hợp với các bản vẽ dùng chung một khung đặt cùng vị trí.
   - `Cả layout / cả bản vẽ`: in cả layout theo layout, trong Model in toàn bộ bản vẽ (extents).
-  - **Thứ tự in**: theo hàng hoặc theo cột (dùng khi in nhiều khung).
+  - **Thứ tự in**: theo hàng từ trên xuống, theo cột, hoặc theo hàng từ dưới lên (dùng khi in nhiều khung).
+  - **Cỡ số thứ tự ảo**: chiều cao số hiện trên khung, tính theo % cạnh ngắn của khung (mặc định 30%).
 - **Máy in**:
   - **Máy in**: mọi máy in/plotter của Windows và file `.pc3`. Máy in ra file (`DWG To PDF.pc3`, DWF...) gộp tất cả trang vào **một file nhiều trang**.
   - **Khổ giấy**: danh sách khổ của máy in đang chọn.
   - **Tỉ lệ**: `Vừa khổ giấy (Fit)`, các tỉ lệ `1:1` ... `1:1000`, hoặc gõ tay dạng `1:150` (1 mm giấy = 150 đơn vị bản vẽ).
   - **Màu nét in**: `monochrome.ctb` (đen trắng), `acad.ctb` (màu theo bản vẽ), `grayscale.ctb` (thang xám)... hoặc giữ theo page setup. Chỉ hiện bảng `.ctb` hoặc `.stb` đúng kiểu của bản vẽ.
   - **Lưu file vào**: thư mục lưu PDF. Để trống thì lưu cạnh bản vẽ. Tên file: `<tên bản vẽ>-<tên layout>.pdf` khi in một bản vẽ, `<tên bản vẽ>.pdf` khi in nhiều file.
-- **In nhiều file**: thư mục chứa DWG, có gồm thư mục con không, in trong `Model`, `Các layout` hay `Model và các layout`.
+- **In nhiều file**: thư mục chứa DWG, có gồm thư mục con không, in trong `Model`, `Các layout` hay `Model và các layout`, và ô **Gộp PDF của mọi bản vẽ thành một file tổng hợp**.
 - Nút **In Model**, **In layout này**, **In nhiều file**, **Hủy**.
 
 ### In một bản vẽ (`INMODEL`, `INLAYOUT`)
@@ -97,10 +101,11 @@ Hộp thoại gồm:
    - `Vung`: quét lần lượt từng hình chữ nhật cần in, mỗi hình một trang, `Enter` để xong. Thứ tự in là thứ tự quét.
    - `ToanBo`: in cả layout / cả bản vẽ.
 2. Khi dùng khung: chọn vùng chứa các khung, hoặc `Enter` để lấy tất cả.
-3. **Xem thứ tự in.** Mỗi khung được viền xanh lơ và hiện số thứ tự màu đỏ ở giữa. Số này chỉ là hình ảo trên màn hình, không ghi vào bản vẽ. Dòng nhắc `Thứ tự in [Hang/Cot/Bam/Sua/CaiDat/In/Thoat] <In>`:
-   - `Hang`: theo hàng, trên xuống dưới, trái sang phải. `Cot`: theo cột, trái sang phải, trên xuống dưới.
+3. **Xem thứ tự in.** Mỗi khung được viền xanh lơ và hiện số thứ tự màu đỏ ở giữa. Số này chỉ là hình ảo trên màn hình, không ghi vào bản vẽ. Dòng nhắc `Thứ tự in [Hang/Duoi/Cot/Bam/Sua/DanhSo/DanhMuc/CaiDat/In/Thoat] <In>`:
+   - `Hang`: theo hàng, trên xuống dưới, trái sang phải. `Duoi`: theo hàng từ dưới lên, trái sang phải. `Cot`: theo cột, trái sang phải, trên xuống dưới.
    - `Bam`: bấm lần lượt vào các khung theo thứ tự muốn in, `Enter` để dừng; khung chưa bấm xếp tiếp theo hàng.
    - `Sua`: sửa thủ công. Bấm vào một khung, gõ số mới; các khung khác tự dồn số.
+   - `DanhSo`, `DanhMuc`: đánh số bản vẽ hoặc lập danh mục theo đúng thứ tự đang hiện (như lệnh `DANHSOBV`, `DANHMUCBV`), xong quay lại dòng nhắc này để in.
    - `CaiDat`: mở hộp thoại máy in, khổ giấy, tỉ lệ, màu nét in trước khi in.
    - `In` (hoặc `Enter`): in ngay theo cấu hình. Nếu cấu hình chưa có máy in, hộp thoại máy in tự mở.
 
@@ -116,7 +121,28 @@ Mỗi bản vẽ trong thư mục được mở chỉ đọc, in, rồi đóng l
 - Model: in các khung tìm được theo thứ tự của cấu hình. Không có khung nào thì bỏ qua Model.
 - Mỗi layout (theo thứ tự tab): có từ 2 khung trở lên thì in từng khung; một khung hoặc không có khung thì in cả layout. Layout trống (chưa vẽ gì) được bỏ qua.
 - Tất cả trang của một bản vẽ vào một file PDF `<tên bản vẽ>.pdf`. Chọn thư mục "Lưu file vào" thì cấu trúc thư mục con được giữ nguyên.
+- **Gộp PDF**: bật ô gộp thì sau khi in xong, mọi file PDF được gộp theo thứ tự in thành `<tên thư mục>_TongHop.pdf` trong thư mục lưu file (hoặc thư mục bản vẽ). Các file PDF riêng vẫn được giữ. Cần file `PdfSharp.dll` nằm cạnh `DwgToDxf.dll`.
 - Nhật ký `InNhieuFile_yyyyMMdd_HHmmss.log` ghi vào thư mục lưu file (hoặc thư mục bản vẽ): file nào in được bao nhiêu trang, file nào lỗi và lý do. Bấm **Hủy cả lệnh in** trên hộp tiến độ để dừng.
+
+### Vẽ vùng in (`VEVUNGIN`)
+
+Dùng khi bản vẽ không có khung tên dạng block hay polyline chung một layer. Quét lần lượt từng hình chữ nhật, `Enter` để xong. Các hình được vẽ trên layer `VUNG_IN` (màu tím, tắt in nên không ra giấy). Cấu hình in đang dùng tự chuyển sang nhận khung là polyline chữ nhật trên layer `VUNG_IN`; bấm **Lưu** trong `CAIDATIN` để giữ cho lần sau và cho in nhiều file.
+
+### Đánh số bản vẽ (`DANHSOBV`)
+
+1. Chọn khung như lệnh in (khung mẫu, `CauHinh` hoặc `Vung`), xem và đổi thứ tự `[Hang/Duoi/Cot/Bam/Sua/OK/Thoat]`, `Enter` để đồng ý.
+2. Bấm vào ô số hiệu bản vẽ trong một khung bất kỳ:
+   - Attribute của block khung tên: mọi khung được ghi vào attribute cùng tên.
+   - TEXT/MTEXT vẽ rời (không nằm trong block): mọi khung được ghi vào chữ ở cùng vị trí tương đối trong khung.
+3. Nhập tiền tố (ví dụ `KC-`), hậu tố, số bắt đầu, số chữ số, có ghi kèm tổng số không. Ví dụ `KC-` + bắt đầu 1 + 2 chữ số + tổng số cho 10 khung: `KC-01/10` ... `KC-10/10`. Giá trị nhập được nhớ cho lần sau trong phiên làm việc; gõ `.` để xóa tiền tố/hậu tố.
+4. Khung nào không tìm thấy ô số hiệu được báo ở dòng lệnh. Dùng `UNDO` để hoàn tác.
+
+### Danh mục bản vẽ (`DANHMUCBV`)
+
+1. Chọn khung và thứ tự như `DANHSOBV`.
+2. Bấm vào ô ký hiệu bản vẽ (hoặc `Enter` để bỏ, chỉ có STT), rồi bấm vào ô tên bản vẽ. Cách nhận ô giống `DANHSOBV`.
+3. Nhập chiều cao chữ, số dòng mỗi cột (0: một cột; ví dụ 20 thì cứ 20 dòng sang cột mới bên phải), điểm đặt bảng (góc trên trái).
+4. Bảng gồm tiêu đề `DANH MỤC BẢN VẼ`, dòng `STT | KÝ HIỆU | TÊN BẢN VẼ` và một dòng cho mỗi khung, vẽ bằng LINE và TEXT trên layer hiện hành với kiểu chữ hiện hành (dùng kiểu chữ có font tiếng Việt Unicode để hiện đúng dấu).
 
 ### Thiết lập in khác
 
@@ -143,11 +169,11 @@ Hoặc dùng dòng lệnh: `dotnet build src/DwgToDxf/DwgToDxf.csproj -c Release
 
 ### Cách nhanh: file LISP tự nạp (không cần NETLOAD)
 
-1. Chép `DwgToDxf.dll` và `AutocadAddin.lsp` vào cùng một thư mục, ví dụ `D:\AutocadAddin`.
+1. Chép `DwgToDxf.dll`, `PdfSharp.dll` và `AutocadAddin.lsp` vào cùng một thư mục, ví dụ `D:\AutocadAddin`.
 2. `OPTIONS` > Files: thêm thư mục đó vào **Support File Search Path** và **Trusted Locations**.
    Nếu không muốn thêm vào Support File Search Path, mở `AutocadAddin.lsp` và sửa dòng `*ACA-DLL*` thành đường dẫn đầy đủ tới DLL, ví dụ `(setq *ACA-DLL* "D:/AutocadAddin/DwgToDxf.dll")`.
 3. `APPLOAD` > **Startup Suite** > Contents... > Add, chọn `AutocadAddin.lsp`. Từ đó mỗi lần mở AutoCAD file LISP tự nạp.
-4. Gõ `CAIDATIN`, `INMODEL`, `INLAYOUT`, `INNHIEUFILE` hoặc `DWG2DXF` như bình thường. Lần đầu gõ, LISP nạp DLL rồi chạy lệnh; các lần sau AutoCAD chạy thẳng lệnh trong DLL. Lệnh `TAIADDIN` nạp DLL ngay mà không chạy lệnh nào.
+4. Gõ `CAIDATIN`, `INMODEL`, `INLAYOUT`, `INNHIEUFILE`, `VEVUNGIN`, `DANHSOBV`, `DANHMUCBV` hoặc `DWG2DXF` như bình thường. Lần đầu gõ, LISP nạp DLL rồi chạy lệnh; các lần sau AutoCAD chạy thẳng lệnh trong DLL. Lệnh `TAIADDIN` nạp DLL ngay mà không chạy lệnh nào.
 
 LISP chỉ định nghĩa vài lệnh nhỏ nên mở AutoCAD không chậm thêm; DLL chỉ được nạp khi cần.
 

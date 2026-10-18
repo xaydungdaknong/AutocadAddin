@@ -6,8 +6,28 @@ namespace DwgToDxf.Printing
     /// <summary>Sắp xếp thứ tự in các khung.</summary>
     public static class FrameOrder
     {
-        public static List<Frame> Sort(IEnumerable<Frame> frames, OrderMode mode) =>
-            mode == OrderMode.Columns ? ByColumns(frames) : ByRows(frames);
+        public static List<Frame> Sort(IEnumerable<Frame> frames, OrderMode mode)
+        {
+            switch (mode)
+            {
+                case OrderMode.Columns: return ByColumns(frames);
+                case OrderMode.RowsFromBottom: return ByRowsFromBottom(frames);
+                default: return ByRows(frames);
+            }
+        }
+
+        /// <summary>Theo hàng từ dưới lên: hàng dưới cùng trước, trong mỗi hàng từ trái sang phải.</summary>
+        public static List<Frame> ByRowsFromBottom(IEnumerable<Frame> frames)
+        {
+            var rows = new List<List<Frame>>();
+            foreach (var f in frames.OrderBy(f => f.MinY).ThenBy(f => f.MinX))
+            {
+                var row = rows.FirstOrDefault(r => f.CenterY >= r[0].MinY && f.CenterY <= r[0].MaxY);
+                if (row == null) rows.Add(row = new List<Frame>());
+                row.Add(f);
+            }
+            return rows.SelectMany(r => r.OrderBy(f => f.MinX)).ToList();
+        }
 
         /// <summary>
         /// Theo hàng: từ trên xuống dưới, trong mỗi hàng từ trái sang phải.

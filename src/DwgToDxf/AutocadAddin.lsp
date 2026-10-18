@@ -6,7 +6,8 @@
 ;;;   2. Them thu muc do vao Support File Search Path va Trusted Locations
 ;;;      (OPTIONS > Files), HOAC sua duong dan *ACA-DLL* ben duoi.
 ;;;   3. APPLOAD > Startup Suite > Contents... > Add file nay, de tu nap moi lan mo AutoCAD.
-;;;   4. Go DWG2DXF, -DWG2DXF, CAIDATIN, INMODEL, INLAYOUT, INNHIEUFILE nhu binh thuong.
+;;;   4. Go DWG2DXF, -DWG2DXF, CAIDATIN, INMODEL, INLAYOUT, INNHIEUFILE,
+;;;      VEVUNGIN, DANHSOBV, DANHMUCBV nhu binh thuong.
 ;;;
 ;;; Lan dau go lenh, file nay nap DLL roi chay lenh. Tu lan sau AutoCAD chay thang lenh trong DLL.
 
@@ -54,9 +55,12 @@
 (defun c:CAIDATIN () (aca:run "CAIDATIN"))
 (defun c:INNHIEUFILE () (aca:run "INNHIEUFILE"))
 (defun c:INNHIEUFILECHAY () (aca:run "INNHIEUFILECHAY"))
+(defun c:VEVUNGIN () (aca:run "VEVUNGIN"))
+(defun c:DANHSOBV () (aca:run "DANHSOBV"))
+(defun c:DANHMUCBV () (aca:run "DANHMUCBV"))
 
 ;; Lenh nap ngay, khong chay lenh nao.
 (defun c:TAIADDIN () (if (aca:load) (princ "\nDa nap AutocadAddin.")) (princ))
 
-(princ "\nAutocadAddin: go CAIDATIN, INMODEL, INLAYOUT, INNHIEUFILE, DWG2DXF (DLL se tu nap lan dau).")
+(princ "\nAutocadAddin: go CAIDATIN, INMODEL, INLAYOUT, INNHIEUFILE, VEVUNGIN, DANHSOBV, DANHMUCBV, DWG2DXF (DLL se tu nap lan dau).")
 (princ)
