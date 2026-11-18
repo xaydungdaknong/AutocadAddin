@@ -51,7 +51,7 @@ namespace DwgToDxf
 
             var search = options.IncludeSubfolders ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
             var files = Directory.EnumerateFiles(options.SourceFolder, "*.dwg", search)
-                .Where(f => string.Equals(Path.GetExtension(f), ".dwg", StringComparison.OrdinalIgnoreCase))
+                .Where(PathUtil.IsDwg)
                 .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
                 .ToList();
             result.Total = files.Count;
@@ -145,25 +145,8 @@ namespace DwgToDxf
             }
         }
 
-        private static string GetOutputPath(string src, ConvertOptions options)
-        {
-            var name = Path.GetFileNameWithoutExtension(src) + ".dxf";
-            if (string.IsNullOrWhiteSpace(options.OutputFolder))
-                return Path.Combine(Path.GetDirectoryName(src), name);
-
-            // Giữ nguyên cấu trúc thư mục con bên trong thư mục đích.
-            var relativeDir = GetRelativePath(options.SourceFolder, Path.GetDirectoryName(src));
-            return Path.Combine(options.OutputFolder, relativeDir, name);
-        }
-
-        private static string GetRelativePath(string root, string path)
-        {
-            var rootFull = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-            var full = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-            if (!full.StartsWith(rootFull, StringComparison.OrdinalIgnoreCase))
-                return string.Empty;
-            return full.Substring(rootFull.Length).TrimEnd(Path.DirectorySeparatorChar);
-        }
+        private static string GetOutputPath(string src, ConvertOptions options) =>
+            PathUtil.GetOutputPath(src, options.SourceFolder, options.OutputFolder);
 
         public static string VersionName(DwgVersion v)
         {
@@ -182,7 +165,7 @@ namespace DwgToDxf
 
         public static DwgVersion ParseVersion(string keyword)
         {
-            switch ((keyword ?? string.Empty).ToUpperInvariant().TrimStart('V'))
+            switch (PathUtil.NormalizeVersionKeyword(keyword))
             {
                 case "2013": return DwgVersion.AC1027;
                 case "2010": return DwgVersion.AC1024;

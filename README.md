@@ -26,9 +26,10 @@ Chạy theo thứ tự cho từng file. Bước nào lỗi chỉ ghi vào nhật
 
 1. **Audit**: kiểm tra và sửa lỗi cấu trúc bản vẽ (như lệnh `AUDIT` trả lời Yes).
 2. **Xref**: reload xref đang unload, bind kiểu Insert mọi xref tìm thấy (tên block và layer giữ nguyên, không có tiền tố `$0$`). Xref không tìm thấy file được detach và ghi tên vào nhật ký.
-3. **Block**: phá (explode) mọi block trong Model và các Layout, lặp lại cho block lồng nhau, kể cả dynamic block và block vừa bind từ xref.
+3. **Block**: layer bị khóa được mở khóa tạm trong bước này và bước 4, xong khóa lại. Phá (explode) mọi block trong Model và các Layout, lặp lại cho block lồng nhau, kể cả dynamic block và block vừa bind từ xref.
    - Attribute nhìn thấy được chuyển thành TEXT/MTEXT giữ nguyên giá trị. Attribute ẩn bị bỏ.
-   - Đối tượng trên layer 0 hoặc có màu, linetype, lineweight ByBlock lấy theo block chứa nó, giống như khi hiển thị.
+   - Đối tượng trên layer 0 hoặc có màu, linetype, lineweight ByBlock lấy theo block chứa nó, giống như khi hiển thị. Nếu block chứa để ByLayer, đối tượng nhận giá trị thực của layer block chứa.
+   - Attribute của block lồng bên trong block khác được giữ lại (chuyển thành chữ ở lượt phá tiếp theo).
    - Bảng (TABLE) được giữ nguyên. Block không phá được (ví dụ scale không đều) được giữ nguyên và ghi vào nhật ký.
 4. **Rác**: xóa TEXT/MTEXT rỗng và đường thẳng dài bằng 0.
 5. **Purge**: lặp lại tới khi hết các block, layer, linetype, text style, dim style, RegApp, multiline style, table style, mleader style, material không dùng.
@@ -47,17 +48,38 @@ V2018
 Yes
 ```
 
+## Cài đặt (cho người dùng)
+
+Không cần Visual Studio.
+
+1. Tải gói `DwgToDxf-AutoCAD2023.zip`: vào tab **Actions** của repo trên GitHub, mở lần chạy `build` mới nhất (có dấu tích xanh), kéo xuống mục **Artifacts**. Hoặc tự build (xem dưới), gói nằm ở thư mục `dist/`.
+2. Giải nén, **đóng AutoCAD**, chạy `install.cmd`. Gói `DwgToDxf.bundle` được chép vào `%APPDATA%\Autodesk\ApplicationPlugins`.
+3. Mở AutoCAD 2023, gõ `DWG2DXF`. Addin tự nạp mỗi lần mở AutoCAD, không cần `NETLOAD`, không cần thêm `TRUSTEDPATHS`.
+
+Gỡ: chạy `uninstall.cmd`. Cập nhật bản mới: chạy lại `install.cmd` của bản mới.
+
+Lần đầu AutoCAD có thể hỏi có cho nạp `DwgToDxf.dll` không: chọn **Always Load**.
+
 ## Build
 
 Yêu cầu: Windows, Visual Studio 2019/2022 (workload ".NET desktop development"), .NET Framework 4.8 Developer Pack.
 
 1. Mở `src/DwgToDxf/DwgToDxf.csproj` bằng Visual Studio.
 2. Visual Studio tự tải gói NuGet `AutoCAD.NET 24.2.0` (AcCoreMgd, AcDbMgd, AcMgd). Các DLL này không được copy ra thư mục bin vì AutoCAD đã có sẵn.
-3. Chọn cấu hình `Release`, build. Thư mục bin chỉ có `DwgToDxf.dll`. Kết quả: `src/DwgToDxf/bin/Release/net48/DwgToDxf.dll`.
+3. Chọn cấu hình `Release`, build. Thư mục bin chỉ có `DwgToDxf.dll`. Kết quả: `src/DwgToDxf/bin/Release/net48/DwgToDxf.dll`, và gói cài đặt `dist/` (bundle + `install.cmd` + `uninstall.cmd`) ở gốc repo.
 
-Hoặc dùng dòng lệnh: `dotnet build src/DwgToDxf/DwgToDxf.csproj -c Release`.
+Hoặc dùng dòng lệnh (cần .NET 8 SDK, build được cả trên Linux nhờ gói reference assemblies):
 
-## Nạp vào AutoCAD
+```
+dotnet build AutocadAddin.sln -c Release
+dotnet test tests/DwgToDxf.Tests -c Release
+```
+
+Kiểm thử tự động chỉ phủ phần logic không cần AutoCAD (tính đường dẫn đầu ra, đọc từ khóa phiên bản). Phần làm sạch bản vẽ phải thử trong AutoCAD, xem [NGHIEM_THU.md](NGHIEM_THU.md).
+
+GitHub Actions (`.github/workflows/build.yml`) build và chạy kiểm thử trên Windows mỗi lần push hoặc mở PR, rồi đính kèm gói cài đặt.
+
+## Nạp thủ công (khi đang phát triển)
 
 1. Mở AutoCAD 2023, gõ `NETLOAD`, chọn `DwgToDxf.dll`.
 2. Gõ `DWG2DXF`.

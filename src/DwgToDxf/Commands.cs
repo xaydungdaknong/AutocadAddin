@@ -51,10 +51,10 @@ namespace DwgToDxf
 
             var src = ed.GetString(new PromptStringOptions("\nThư mục nguồn: ") { AllowSpaces = true });
             if (src.Status != PromptStatus.OK) return;
-            var source = src.StringResult.Trim().Trim('"');
-            if (!Directory.Exists(source))
+            var source = TryNormalize(src.StringResult);
+            if (source == null || !Directory.Exists(source))
             {
-                ed.WriteMessage("\nKhông tìm thấy thư mục: {0}", source);
+                ed.WriteMessage("\nKhông tìm thấy thư mục: {0}", src.StringResult);
                 return;
             }
 
@@ -65,7 +65,12 @@ namespace DwgToDxf
             {
                 var dst = ed.GetString(new PromptStringOptions("\nThư mục đích: ") { AllowSpaces = true });
                 if (dst.Status != PromptStatus.OK) return;
-                output = dst.StringResult.Trim().Trim('"');
+                output = TryNormalize(dst.StringResult);
+                if (output == null)
+                {
+                    ed.WriteMessage("\nĐường dẫn thư mục đích không hợp lệ: {0}", dst.StringResult);
+                    return;
+                }
             }
 
             Execute(ed, new ConvertOptions
@@ -119,9 +124,25 @@ namespace DwgToDxf
             return true;
         }
 
+        private static string TryNormalize(string input)
+        {
+            try { return PathUtil.NormalizeFolder(input); }
+            catch (System.Exception) { return null; } // ký tự không hợp lệ trong đường dẫn
+        }
+
         private static void Execute(Editor ed, ConvertOptions options)
         {
-            var result = DxfConverter.Run(options);
+            ConvertResult result;
+            try
+            {
+                result = DxfConverter.Run(options);
+            }
+            catch (System.Exception ex)
+            {
+                // Lỗi ngoài từng file (ví dụ không ghi được thư mục đích): báo ở dòng lệnh, không làm AutoCAD hiện hộp lỗi.
+                ed.WriteMessage("\nDWG2DXF dừng do lỗi: {0}\n", ex.Message);
+                return;
+            }
 
             if (result.Total == 0)
             {
