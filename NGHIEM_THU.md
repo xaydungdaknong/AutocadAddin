@@ -1,4 +1,4 @@
-# Nghiệm thu DWG2DXF trên máy có AutoCAD 2023
+# Nghiệm thu AutocadAddin trên máy có AutoCAD 2023
 
 Phần build và kiểm thử tự động chạy được trên máy chủ. Phần dưới đây cần AutoCAD thật nên phải thử trên máy của bạn. Mỗi mục ghi Đạt / Không đạt, nếu không đạt gửi lại file `DWG2DXF_*.log` và file DWG mẫu.
 
@@ -12,7 +12,7 @@ Phần build và kiểm thử tự động chạy được trên máy chủ. Ph�
    - một bản vẽ có block chèn trên layer khác 0 mà bên trong vẽ màu ByBlock,
    - một thư mục con có DWG, một file DWG hỏng (đổi tên một file .txt thành .dwg).
 
-## Các bước thử
+## A. DWG2DXF
 
 | # | Thao tác | Kết quả mong đợi |
 |---|---|---|
@@ -32,4 +32,24 @@ Phần build và kiểm thử tự động chạy được trên máy chủ. Ph�
 | 14 | Chọn `R12` và `No` ở câu làm sạch | Ra DXF R12, block giữ nguyên. |
 | 15 | Mở DXF bằng phần mềm đích (LibreCAD, phần mềm dự toán...) | Đọc được, đúng hình. |
 
-Khi các mục 1 đến 7 và 15 đạt là có thể đưa vào dùng hằng ngày. Các mục 8 đến 10 là phần vừa sửa, cần xác nhận trên bản vẽ thật.
+## B. In ấn
+
+Chuẩn bị thêm: một bản vẽ có nhiều khung tên (block) trong Model, một bản vẽ có 2 layout trở lên trong đó có layout chưa từng mở, một thư mục 3 đến 5 bản vẽ.
+
+| # | Thao tác | Kết quả mong đợi |
+|---|---|---|
+| 16 | `CAIDATIN`, tạo cấu hình "A3 PDF": Chọn khung mẫu, máy in `DWG To PDF.pc3`, khổ A3, `monochrome.ctb`, Lưu | Đóng AutoCAD mở lại, `CAIDATIN` vẫn còn cấu hình. |
+| 17 | `INMODEL` → Enter → Enter | Hiện số thứ tự đỏ trên từng khung; `Hang`/`Cot`/`Duoi`/`Bam`/`Sua` đổi đúng thứ tự. |
+| 18 | Enter để in | Một file PDF nhiều trang, mỗi khung một trang đúng thứ tự, khung ngang ra trang ngang, khung dọc ra trang dọc. |
+| 19 | `INLAYOUT` trên layout một khung và layout nhiều khung | Một khung: in cả layout. Nhiều khung: chọn và in từng khung. |
+| 20 | `INNHIEUFILE`, chọn thư mục, "Model và các layout", bật gộp PDF, In nhiều file | Mỗi bản vẽ một PDF, file `_TongHop.pdf` đủ trang, log `InNhieuFile_*.log`. Layout chưa từng mở in ra có hình (không trắng). Bản vẽ đang mở vẫn ở layout cũ sau khi in. |
+| 21 | `VEVUNGIN` quét 2 vùng, rồi `INMODEL` | Vùng tím không ra giấy, lệnh in nhận đúng 2 vùng. |
+| 22 | `DANHSOBV` với tiền tố `KC-`, 2 chữ số, có tổng số | Khung tên ghi `KC-01/05`... đúng thứ tự; `UNDO` hoàn tác được. |
+| 23 | `DANHMUCBV` | Bảng danh mục đúng STT, ký hiệu, tên theo thứ tự in. |
+| 24 | In ra máy in giấy thật (nếu có) | Gửi đúng số trang, đúng khổ. |
+
+## Kết luận
+
+Khi các mục 1 đến 7, 15 đến 18 và 20 đạt là có thể đưa vào dùng hằng ngày. Các mục 3, 8, 9, 10 và 20 kiểm tra phần vừa sửa trong đợt này (audit, layer khóa, attribute block lồng, màu ByBlock, in layout chưa mở), cần xác nhận trên bản vẽ thật.
+
+Bản AutoCAD 2010 (thư mục `AutoCAD2010`): nếu còn dùng, thử lại các mục 1, 2, 5, 16 đến 18 sau khi nạp bằng `AutocadAddin.lsp`.

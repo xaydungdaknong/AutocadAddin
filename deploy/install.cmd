@@ -22,5 +22,5 @@ if errorlevel 1 (
   exit /b 1
 )
 echo Da cai vao: %DST%
-echo Mo AutoCAD 2023 va go DWG2DXF.
+echo Mo AutoCAD 2023 va go DWG2DXF, CAIDATIN, INMODEL...
 pause

@@ -24,11 +24,12 @@ namespace DwgToDxf
         public static string GetOutputPath(string dwgPath, string sourceFolder, string outputFolder)
         {
             var name = Path.GetFileNameWithoutExtension(dwgPath) + ".dxf";
-            if (string.IsNullOrWhiteSpace(outputFolder))
+            if (outputFolder == null || outputFolder.Trim().Length == 0)
                 return Path.Combine(Path.GetDirectoryName(dwgPath), name);
 
+            // Path.Combine 2 tham số: .NET 3.5 (bản AutoCAD 2010) không có bản 3 tham số.
             var relativeDir = GetRelativePath(sourceFolder, Path.GetDirectoryName(dwgPath));
-            return Path.Combine(outputFolder, relativeDir, name);
+            return Path.Combine(Path.Combine(outputFolder, relativeDir), name);
         }
 
         /// <summary>Đường dẫn của path tính từ root. Rỗng nếu path không nằm trong root.</summary>

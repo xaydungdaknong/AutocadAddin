@@ -25,6 +25,6 @@ jobs:
       # Gói cài đặt: giải nén, chạy install.cmd (đóng AutoCAD trước).
       - uses: actions/upload-artifact@v4
         with:
-          name: DwgToDxf-AutoCAD2023
+          name: AutocadAddin-goi-cai-dat
           path: dist/
           if-no-files-found: error

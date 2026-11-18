@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+#if !ACAD2010
 using Autodesk.AutoCAD.ApplicationServices;
+#endif
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
@@ -84,8 +86,13 @@ namespace DwgToDxf
         {
             // Audit là extension method trong AcCoreMgd (ApplicationServices.DatabaseExtension),
             // không phải method của Database, nên trước đây tìm bằng reflection luôn bị bỏ qua.
+#if ACAD2010
+            // API .NET của AutoCAD 2010 không có Audit cho database.
+            log.Add("audit: AutoCAD 2010 khong ho tro, bo qua");
+#else
             db.Audit(true, false);
             log.Add("audit: xong");
+#endif
         }
 
         /// <summary>
@@ -411,8 +418,8 @@ namespace DwgToDxf
                     {
                         var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
                         bool empty =
-                            (ent is DBText t && string.IsNullOrWhiteSpace(t.TextString)) ||
-                            (ent is MText m && string.IsNullOrWhiteSpace(m.Text)) ||
+                            (ent is DBText t && Compat.IsBlank(t.TextString)) ||
+                            (ent is MText m && Compat.IsBlank(m.Text)) ||
                             (ent is Line l && l.Length < Tolerance.Global.EqualPoint);
                         if (!empty) continue;
                         try

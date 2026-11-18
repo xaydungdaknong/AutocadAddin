@@ -6,7 +6,7 @@
                     ProductType="Application"
                     Name="DwgToDxf"
                     AppVersion="1.1.0"
-                    Description="Chuyen hang loat DWG sang DXF (lenh DWG2DXF, -DWG2DXF)"
+                    Description="DWG2DXF va in khung (CAIDATIN, INMODEL, INLAYOUT, INNHIEUFILE)"
                     Author="xaydungdaknong"
                     ProductCode="{0F612E71-754D-4B27-A79E-E1FE3987B0C7}"
                     UpgradeCode="{BF502A66-448F-460C-851C-E4FBF0374D42}">
@@ -16,7 +16,7 @@
   <Components>
     <ComponentEntry AppName="DwgToDxf"
                     ModuleName="./Contents/DwgToDxf.dll"
-                    AppDescription="Chuyen hang loat DWG sang DXF"
+                    AppDescription="DWG2DXF va in khung"
                     LoadOnAutoCADStartup="True" />
   </Components>
 </ApplicationPackage>
