@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Gói tự nạp (autoloader) cho AutoCAD 2023. Đặt cả thư mục DwgToDxf.bundle vào
+     %APPDATA%\Autodesk\ApplicationPlugins (install.cmd làm việc này). -->
+<ApplicationPackage SchemaVersion="1.0"
+                    AutodeskProduct="AutoCAD"
+                    ProductType="Application"
+                    Name="DwgToDxf"
+                    AppVersion="1.1.0"
+                    Description="DWG2DXF va in khung (CAIDATIN, INMODEL, INLAYOUT, INNHIEUFILE)"
+                    Author="xaydungdaknong"
+                    ProductCode="{0F612E71-754D-4B27-A79E-E1FE3987B0C7}"
+                    UpgradeCode="{BF502A66-448F-460C-851C-E4FBF0374D42}">
+  <CompanyDetails Name="xaydungdaknong" />
+  <!-- R24.2 = AutoCAD 2023. R24.3 = AutoCAD 2024 (cùng nền .NET Framework 4.8, chưa thử). -->
+  <RuntimeRequirements OS="Win64" Platform="AutoCAD*" SeriesMin="R24.2" SeriesMax="R24.3" />
+  <Components>
+    <ComponentEntry AppName="DwgToDxf"
+                    ModuleName="./Contents/DwgToDxf.dll"
+                    AppDescription="DWG2DXF va in khung"
+                    LoadOnAutoCADStartup="True" />
+  </Components>
+</ApplicationPackage>

@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+#if !ACAD2010
+using Autodesk.AutoCAD.ApplicationServices;
+#endif
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
@@ -22,9 +25,54 @@ namespace DwgToDxf
             // Mỗi bước lỗi chỉ được ghi log, các bước sau và việc xuất DXF vẫn chạy.
             Step("audit", () => Audit(db, log), log);
             Step("xref", () => BindXrefs(db, log), log);
-            Step("block", () => ExplodeBlocks(db, log), log);
-            Step("rac", () => EraseEmptyEntities(db, log), log);
+
+            // Layer bị khóa làm phá block và xóa đối tượng thất bại; mở khóa tạm, xong khóa lại.
+            var locked = new List<ObjectId>();
+            Step("layer", () => UnlockLayers(db, locked, log), log);
+            try
+            {
+                Step("block", () => ExplodeBlocks(db, log), log);
+                Step("rac", () => EraseEmptyEntities(db, log), log);
+            }
+            finally
+            {
+                Step("layer", () => RelockLayers(db, locked), log);
+            }
+
             Step("purge", () => PurgeAll(db, log), log);
+        }
+
+        private static void UnlockLayers(Database db, List<ObjectId> locked, IList<string> log)
+        {
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                var lt = (LayerTable)tr.GetObject(db.LayerTableId, OpenMode.ForRead);
+                foreach (ObjectId id in lt)
+                {
+                    var layer = (LayerTableRecord)tr.GetObject(id, OpenMode.ForRead);
+                    if (!layer.IsLocked) continue;
+                    layer.UpgradeOpen();
+                    layer.IsLocked = false;
+                    locked.Add(id);
+                }
+                tr.Commit();
+            }
+            if (locked.Count > 0)
+                log.Add("layer: mo khoa tam " + locked.Count + " layer");
+        }
+
+        private static void RelockLayers(Database db, List<ObjectId> locked)
+        {
+            if (locked.Count == 0) return;
+            using (var tr = db.TransactionManager.StartTransaction())
+            {
+                foreach (var id in locked)
+                {
+                    if (id.IsErased) continue;
+                    ((LayerTableRecord)tr.GetObject(id, OpenMode.ForWrite)).IsLocked = true;
+                }
+                tr.Commit();
+            }
         }
 
         private static void Step(string name, Action action, IList<string> log)
@@ -36,22 +84,15 @@ namespace DwgToDxf
         /// <summary>Kiểm tra và sửa lỗi cấu trúc (giống lệnh AUDIT, trả lời Yes).</summary>
         private static void Audit(Database db, IList<string> log)
         {
-            // Database.Audit không có trong mọi bản API, nên gọi qua reflection.
-            var audit = typeof(Database).GetMethod("Audit", new[] { typeof(bool), typeof(bool) });
-            if (audit == null)
-            {
-                log.Add("audit: API khong co, bo qua");
-                return;
-            }
-            try
-            {
-                audit.Invoke(db, new object[] { true, false });
-                log.Add("audit: xong");
-            }
-            catch (System.Exception ex)
-            {
-                log.Add("audit: loi " + (ex.InnerException ?? ex).Message);
-            }
+            // Audit là extension method trong AcCoreMgd (ApplicationServices.DatabaseExtension),
+            // không phải method của Database, nên trước đây tìm bằng reflection luôn bị bỏ qua.
+#if ACAD2010
+            // API .NET của AutoCAD 2010 không có Audit cho database.
+            log.Add("audit: AutoCAD 2010 khong ho tro, bo qua");
+#else
+            db.Audit(true, false);
+            log.Add("audit: xong");
+#endif
         }
 
         /// <summary>
@@ -152,23 +193,44 @@ namespace DwgToDxf
                             var br = (BlockReference)tr.GetObject(id, OpenMode.ForRead);
                             if (br is Table) { failed.Add(id); continue; }
 
+                            List<Entity> parts = null;
                             try
                             {
-                                foreach (var ent in ExplodeOne(tr, br))
+                                parts = ExplodeOne(tr, br, out var nested);
+                                // Mở block để ghi trước khi thêm phần đã phá: nếu không mở được
+                                // (ví dụ layer khóa) thì chưa có gì thay đổi, không sinh hình trùng.
+                                br.UpgradeOpen();
+                                foreach (var ent in parts)
                                 {
                                     btr.AppendEntity(ent);
                                     tr.AddNewlyCreatedDBObject(ent, true);
                                     if (ent is DBText t && !(t.HorizontalMode == TextHorizontalMode.TextLeft && t.VerticalMode == TextVerticalMode.TextBase))
                                         t.AdjustAlignment(db);
                                 }
-                                br.UpgradeOpen();
+                                parts = null;
                                 br.Erase();
                                 thisPass++;
+
+                                try
+                                {
+                                    if (!CopyNestedAttributes(tr, nested))
+                                        log.Add("block: " + br.Name + " co block long nhau chua attribute, khong chep duoc attribute cua block con");
+                                }
+                                catch (System.Exception ex)
+                                {
+                                    log.Add("block: " + br.Name + " loi chep attribute block con: " + ex.Message);
+                                }
                             }
                             catch (System.Exception ex)
                             {
                                 failed.Add(id);
                                 log.Add("block: khong pha duoc " + br.Name + " (" + ex.Message + "), giu nguyen");
+                            }
+                            finally
+                            {
+                                if (parts != null)
+                                    foreach (var ent in parts)
+                                        if (ent.ObjectId.IsNull) ent.Dispose();
                             }
                         }
                     }
@@ -180,11 +242,24 @@ namespace DwgToDxf
             log.Add("block: da pha " + exploded + " block reference");
         }
 
-        private static List<Entity> ExplodeOne(Transaction tr, BlockReference br)
+        /// <summary>
+        /// Block con (lồng trong block đang phá) kèm attribute của nó trong định nghĩa block.
+        /// BlockReference.Explode trả về bản sao block con không có attribute, nên phải chép lại.
+        /// Null Copy nghĩa là không ghép được bản sao với block con gốc.
+        /// </summary>
+        private sealed class NestedRef
+        {
+            public BlockReference Copy;
+            public BlockReference Source;
+            public Matrix3d Transform;
+        }
+
+        private static List<Entity> ExplodeOne(Transaction tr, BlockReference br, out List<NestedRef> nested)
         {
             var result = new List<Entity>();
             var parts = new DBObjectCollection();
             br.Explode(parts);
+            nested = MatchNestedRefs(tr, br, parts);
 
             foreach (DBObject obj in parts)
             {
@@ -223,17 +298,86 @@ namespace DwgToDxf
             return result;
         }
 
-        /// <summary>Đối tượng trên layer 0 hoặc thuộc tính ByBlock lấy theo block chứa nó, như khi hiển thị.</summary>
+        /// <summary>
+        /// Ghép các block con trong kết quả Explode với block con gốc trong định nghĩa block.
+        /// Explode trả về đối tượng theo đúng thứ tự trong định nghĩa, nên ghép theo vị trí
+        /// và kiểm tra cùng kiểu. Trả về null Copy nếu không ghép được.
+        /// </summary>
+        private static List<NestedRef> MatchNestedRefs(Transaction tr, BlockReference br, DBObjectCollection parts)
+        {
+            var list = new List<NestedRef>();
+            var def = (BlockTableRecord)tr.GetObject(br.BlockTableRecord, OpenMode.ForRead);
+            var sources = def.Cast<ObjectId>().ToList();
+
+            var withAttributes = new List<(int Index, BlockReference Source)>();
+            for (int i = 0; i < sources.Count; i++)
+            {
+                if (tr.GetObject(sources[i], OpenMode.ForRead) is BlockReference src && !(src is Table) && src.AttributeCollection.Count > 0)
+                    withAttributes.Add((i, src));
+            }
+            if (withAttributes.Count == 0) return list;
+
+            bool aligned = !(br is MInsertBlock) && parts.Count == sources.Count;
+            foreach (var w in withAttributes)
+            {
+                var copy = aligned ? parts[w.Index] as BlockReference : null;
+                if (copy != null && copy.BlockTableRecord != w.Source.BlockTableRecord) copy = null;
+                list.Add(new NestedRef { Copy = copy, Source = w.Source, Transform = br.BlockTransform });
+            }
+            return list;
+        }
+
+        /// <summary>Chép attribute của block con gốc sang bản sao vừa thêm vào bản vẽ. False nếu có block con không ghép được.</summary>
+        private static bool CopyNestedAttributes(Transaction tr, List<NestedRef> nested)
+        {
+            bool ok = true;
+            foreach (var n in nested)
+            {
+                if (n.Copy == null || n.Copy.ObjectId.IsNull) { ok = false; continue; }
+                if (n.Copy.AttributeCollection.Count > 0) continue; // API đã tự chép
+
+                foreach (ObjectId arId in n.Source.AttributeCollection)
+                {
+                    var src = (AttributeReference)tr.GetObject(arId, OpenMode.ForRead);
+                    var ar = (AttributeReference)src.GetTransformedCopy(n.Transform);
+                    n.Copy.AttributeCollection.AppendAttribute(ar);
+                    tr.AddNewlyCreatedDBObject(ar, true);
+                    // Layer 0 / ByBlock của attribute được xử lý khi phá block con ở lượt sau.
+                }
+            }
+            return ok;
+        }
+
+        /// <summary>
+        /// Đối tượng trên layer 0 hoặc thuộc tính ByBlock lấy theo block chứa nó, như khi hiển thị.
+        /// Nếu block chứa có thuộc tính ByLayer mà đối tượng nằm trên layer khác, lấy giá trị thực của layer block chứa.
+        /// </summary>
         private static Entity InheritFromBlock(Entity ent, BlockReference br)
         {
             if (string.Equals(ent.Layer, "0", StringComparison.OrdinalIgnoreCase))
                 ent.LayerId = br.LayerId;
+
+            bool sameLayer = ent.LayerId == br.LayerId;
+            LayerTableRecord brLayer = null;
+            LayerTableRecord BrLayer()
+            {
+                if (brLayer == null)
+                    brLayer = (LayerTableRecord)br.LayerId.GetObject(OpenMode.ForRead);
+                return brLayer;
+            }
+
             if (ent.Color.IsByBlock)
-                ent.Color = br.Color;
+                ent.Color = br.Color.IsByLayer && !sameLayer ? BrLayer().Color : br.Color;
+
             if (string.Equals(ent.Linetype, "BYBLOCK", StringComparison.OrdinalIgnoreCase))
-                ent.LinetypeId = br.LinetypeId;
+            {
+                bool brByLayer = string.Equals(br.Linetype, "BYLAYER", StringComparison.OrdinalIgnoreCase);
+                ent.LinetypeId = brByLayer && !sameLayer ? BrLayer().LinetypeObjectId : br.LinetypeId;
+            }
+
             if (ent.LineWeight == LineWeight.ByBlock)
-                ent.LineWeight = br.LineWeight;
+                ent.LineWeight = br.LineWeight == LineWeight.ByLayer && !sameLayer ? BrLayer().LineWeight : br.LineWeight;
+
             return ent;
         }
 
@@ -274,8 +418,8 @@ namespace DwgToDxf
                     {
                         var ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
                         bool empty =
-                            (ent is DBText t && string.IsNullOrWhiteSpace(t.TextString)) ||
-                            (ent is MText m && string.IsNullOrWhiteSpace(m.Text)) ||
+                            (ent is DBText t && Compat.IsBlank(t.TextString)) ||
+                            (ent is MText m && Compat.IsBlank(m.Text)) ||
                             (ent is Line l && l.Length < Tolerance.Global.EqualPoint);
                         if (!empty) continue;
                         try

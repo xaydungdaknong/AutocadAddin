@@ -1,0 +1,36 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{D5BE8BE3-EB3E-4A31-AB63-28A1F557EF01}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DwgToDxf", "src\DwgToDxf\DwgToDxf.csproj", "{98EB042D-6821-4B2F-909C-AB5E653F9A93}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{7FB7C769-D1AE-4739-9B0F-11BBE530A341}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DwgToDxf.Tests", "tests\DwgToDxf.Tests\DwgToDxf.Tests.csproj", "{8298B1A3-8A73-4119-B7D7-E4824CBBAC2C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{98EB042D-6821-4B2F-909C-AB5E653F9A93}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{98EB042D-6821-4B2F-909C-AB5E653F9A93}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{98EB042D-6821-4B2F-909C-AB5E653F9A93}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{98EB042D-6821-4B2F-909C-AB5E653F9A93}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8298B1A3-8A73-4119-B7D7-E4824CBBAC2C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8298B1A3-8A73-4119-B7D7-E4824CBBAC2C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8298B1A3-8A73-4119-B7D7-E4824CBBAC2C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8298B1A3-8A73-4119-B7D7-E4824CBBAC2C}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{98EB042D-6821-4B2F-909C-AB5E653F9A93} = {D5BE8BE3-EB3E-4A31-AB63-28A1F557EF01}
+		{8298B1A3-8A73-4119-B7D7-E4824CBBAC2C} = {7FB7C769-D1AE-4739-9B0F-11BBE530A341}
+	EndGlobalSection
+EndGlobal
